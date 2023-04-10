@@ -9,3 +9,7 @@
     password: null
     clientid: null
     clientsecret: null
+  grist:
+    apikey: null
+    server: "https://docs.getgrist.com"
+    documentid: null

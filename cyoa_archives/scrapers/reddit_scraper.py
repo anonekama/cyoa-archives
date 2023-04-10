@@ -15,7 +15,7 @@ import redditcleaner
 from .reddit_scraper_utils import extract_urls, get_single_url, is_CYOA, url_list_to_str
 
 
-def scrape_subreddit(subreddit: str, username: str, password: str, clientid: str, clientsecret: str, useragent: str, limit: int = None, outfile: str = None):
+def scrape_subreddit(subreddit: str, username: str, password: str, clientid: str, clientsecret: str, useragent: str = "simple_reddit_scraper (by u/anonekama)", limit: int = None, outfile: str = None):
 	# Create an instance of reddit class
 	log = logging.getLogger(__name__)
 	reddit = praw.Reddit(username = username,

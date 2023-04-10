@@ -63,13 +63,13 @@ def is_CYOA(row):
 	removed = str(row['removed_by_category'])
 	flair_text = str(row['link_flair_text'])
 	if len(removed) > 0:
-		return False
+		return "No"
 	for flair in GOOD_FLAIR:
 		if flair in flair_text:
-			return True
+			return "Yes"
 	for flair in BAD_FLAIR:
 		if flair in flair_text:
-			return False
+			return "No"
 	return ""
 
 def url_list_to_str(url_list):
