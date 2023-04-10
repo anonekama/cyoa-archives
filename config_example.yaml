@@ -1,0 +1,11 @@
+---
+  project:
+    name: "cyoa-archives"
+    author: "anonekama"
+    version: 0.1
+  reddit_scraper:
+    useragent: "simple_reddit_scraper (by u/anonekama)"
+    username: null
+    password: null
+    clientid: null
+    clientsecret: null
