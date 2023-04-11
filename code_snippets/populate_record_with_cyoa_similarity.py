@@ -67,7 +67,6 @@ def main(config, subreddit, password, limit = None):
     iscyoa_df = df.loc[(df['is_cyoa'] == 'Yes') | (df['is_cyoa'].isnull())]
     iscyoa_df = iscyoa_df.loc[iscyoa_df['cyoa'] == 0]
 
-    """
     # Loop through records and find nearest match
     metriclcs = MetricLCS()
     fourgram = NGram(4)
@@ -106,81 +105,7 @@ def main(config, subreddit, password, limit = None):
                     'cyoa': int(min_st.cyoa)
                 }
                 api.update_records('Records', [update_object])
-            #df_final = df_final.append(min_st)
-    #df_final.to_csv('temp.csv')
-    """
-
-    """
-    # make update
-    update_df = df_final[['id', 'cyoa']]
-    update_json = update_df.to_json(orient='records', default_handler=str)
-    update_object = json.loads(update_json)
-    api.update_records('Records', update_object)
-    """
-
-    """
-    data = api.fetch_table('Records')
-    id_dict = {}
-    for item in data:
-        if item.r_id not in id_dict:
-            id_dict[item.r_id] = item.id
-
-    adf['r_id'] = adf['id']
-    adf['id'] = adf['r_id'].apply((lambda x: id_dict.get(x)))
-
-    update_df = adf[['id', 'created_utc', 'parser_timestamp']]
-    update_json = update_df.to_json(orient='records', default_handler=str)
-    update_object = json.loads(update_json)
-    api.update_records('Records', update_object)
-    """
-
-    # add some rows to a table
-    """
-    rows = api.add_records('Test', [
-        {'A': 'eggs'},
-        {'B': 'beets'}
-    ])
-    """
-    # updatethis = { 'id': 1, 'B': 'Test this' }
-
-    # Think about archiving posts after six months
-
-    # api.update_records('Test', [updatethis])
-    # api.update_records('Test', [updatethis])
-    #
-
-
-    """
-    df = scrape_subreddit(subreddit, username, password, clientid, clientsecret, useragent, limit)
-    # df.loc[df['r_id'].isin(id_dict.keys())] # records in keys
-    # df.loc[df['r_id'].isin(id_dict.keys())]
-    # print(df['r_id'].isin(id_dict.keys()))
-    print(df.loc[df['r_id'].isin(id_dict.keys())])
-    newrecords = df.loc[~df['r_id'].isin(id_dict.keys())] # New Records
-
-    addthis = newrecords[["r_id", "is_cyoa", "title", "date_posted", "posted_by", "subreddit", "link_flair_text", "num_comments", "score", "upvote_ratio", "permalink"]]
-    thisrecord = addthis.iloc[0]
-    print(thisrecord['is_cyoa'])
-    print(type(thisrecord['is_cyoa']))
-    print(thisrecord['is_cyoa'])
-    # pr = addthis.to_json(orient='records', default_handler=str)
-    # p = json.loads(pr)
-    # api.add_records('Records', p)
-    # print(p)
-    """
-
-    """
-    rid_to_change = "qwerxz12345"
-    myrecord = api.fetch_table('Records', filters={"r_id": rid_to_change})
-    print(myrecord)
-    print(myrecord[0].id)
-    updatethis = [
-        { 'id': 17193, 'score': 3},
-        { 'id': 17192, 'score': 13313}
-    ]
-    api.update_records('Records', updatethis)
-    """
-    # api.add_records('Records', [{'title': 'Test999', 'date_posted': "2023-4-10", 'r_id': 'qwerxz12345'}])
+        
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
