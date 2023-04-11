@@ -3,6 +3,7 @@ import os
 import pathlib
 import re
 import json
+import logging
 
 from grist_api import GristDocAPI
 import pandas
@@ -11,61 +12,95 @@ from strsimpy.metric_lcs import MetricLCS
 from strsimpy.ngram import NGram
 
 from cyoa_archives.scrapers.reddit_scraper import scrape_subreddit
+from cyoa_archives.grist.api import GristAPIWrapper
 
 def main(config, subreddit, password, limit = None):
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
     # Get variables from config
     username = config.get('reddit_scraper').get('username')
     clientid = config.get('reddit_scraper').get('clientid')
     clientsecret = config.get('reddit_scraper').get('clientsecret')
     useragent = config.get('reddit_scraper').get('useragent')
-    sever = config.get('grist').get('server')
-    apikey = config.get('grist').get('apikey')
-    documentid = config.get('grist').get('documentid')
+    server = config.get('grist').get('server_url')
+    apikey = config.get('grist').get('api_key')
+    documentid = config.get('grist').get('document_id')
+
+    api = GristAPIWrapper(server_url=server, document_id=documentid, api_key=apikey)
+    api2 = GristAPIWrapper.load_config({
+        "server_url": server,
+        "document_id": documentid,
+        "api_key": apikey
+    })
+    print(api.document_id)
+    print(api2.document_id)
+
+    records_pd = api.fetch_table_pd('CYOAs', colnames=['id', 'uuid', 'Official_Title'])
+    print(records_pd)
+
+    # mock = api.add_records('Test', [{'A': 123}])
+    # prompt = api.add_records('Test', [{'A': 123}], mock=False)
+    # noprompt = api.add_records('Test', [{'A': 931223},{'B': 25492223}], mock=False, prompt=False)
+    # print(noprompt)
+
+    # patch = api.update_records('Test', [{'id': 7, 'B': 931255123}], mock=False, prompt=False)
+    # print(patch)
 
     # Get api key from your Profile Settings, and run with GRIST_API_KEY=<key>
-    api = GristDocAPI(documentid, server=sever, api_key=apikey)
+    # api = GristDocAPI(documentid, server=sever, api_key=apikey)
 
-    records = api.fetch_table('Records')
-    cyoas = api.fetch_table('CYOAs')
+    #
 
-    # Convert cyoas into df
-    cyoa_id = {}
-    list_official_title = []
-    list_cyoa_id = []
-    for cyoa in cyoas:
-        official_title = cyoa.Official_Title.replace("CYOA", "")
-        if official_title not in cyoa_id:
-            cyoa_id[official_title] = cyoa.id
-            list_official_title.append(cyoa.Official_Title)
-            list_cyoa_id.append(cyoa.id)
-    cyoa_df = pandas.DataFrame()
-    cyoa_df['id'] = list_cyoa_id
-    cyoa_df['Official_Title'] = list_official_title
-
+    """
     # Convert records into df
     list_id = []
-    list_iscyoa = []
+    list_is_cyoa = []
+    list_selftext = []
     list_cyoa = []
     list_title = []
+    list_num_comments = []
+    list_score = []
+    list_urls = []
+    list_link_flair_text = []
     for record in records:
-        new_title = re.sub(r'([\(\[]).*?([\)\]])', '', record.title)
-        new_title = re.sub(r'[^A-Za-z0-9 ]+', '', new_title)
-        new_title = " ".join(new_title.split())
+        new_title = " ".join(record.title.split())
         list_id.append(record.id)
-        list_iscyoa.append(record.is_cyoa)
+        list_is_cyoa.append(record.is_cyoa)
+        list_selftext.append(record.selftext)
         list_cyoa.append(record.cyoa)
         list_title.append(new_title)
+        list_num_comments.append(record.num_comments)
+        list_score.append(record.score)
+        list_urls.append(record.urls)
+        list_link_flair_text.append(record.link_flair_text)
     df = pandas.DataFrame()
     df['id'] = list_id
-    df['is_cyoa'] = list_iscyoa
+    df['is_cyoa'] = list_is_cyoa
+    df['selftext'] = list_selftext
     df['cyoa'] = list_cyoa
-    df['is_cyoa'] = df['is_cyoa']
     df['title'] = list_title
+    df['num_comments'] = list_num_comments
+    df['score'] = list_score
+    df['urls'] = list_urls
+    df['link_flair_text'] = list_link_flair_text
 
     # Subset dataframe from items with no official cyoa (and is a CYOA) and has no associated cyoa
-    iscyoa_df = df.loc[(df['is_cyoa'] == 'Yes') | (df['is_cyoa'].isnull())]
-    iscyoa_df = iscyoa_df.loc[iscyoa_df['cyoa'] == 0]
+    #badtext = [ "[removed]", "[deleted]" ]
+    # iscyoa_df = df.loc[df['link_flair_text'] == "Jumpchain"]
+    # iscyoa_df = df.loc[df['title'].apply(lambda x: x.find('r/JumpChain') > 0)]
+    iscyoa_df = df.loc[(df['selftext'].apply(lambda x: len(x) == 0)) & (df['urls'].apply(lambda x: len(x) == 0))]
+    print(iscyoa_df)
+
+    # Set found records to is_cyoa false
+    update_df = iscyoa_df[['id', 'is_cyoa']]
+    update_df['is_cyoa'] = ["No"] * len(iscyoa_df)
+    print(update_df)
+    #update_json = update_df.to_json(orient='records', default_handler=str)
+    #update_object = json.loads(update_json)
+    #api.update_records('Records', update_object)
+    """
 
     """
     # Loop through records and find nearest match
@@ -134,13 +169,6 @@ def main(config, subreddit, password, limit = None):
     api.update_records('Records', update_object)
     """
 
-    # add some rows to a table
-    """
-    rows = api.add_records('Test', [
-        {'A': 'eggs'},
-        {'B': 'beets'}
-    ])
-    """
     # updatethis = { 'id': 1, 'B': 'Test this' }
 
     # Think about archiving posts after six months
