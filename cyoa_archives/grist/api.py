@@ -32,9 +32,9 @@ class GristAPIWrapper:
         )
 
     def fetch_table(self, tablename: str, filters: Dict[str, Any] = None) -> List[NamedTuple]:
-        logger.info(f'API: Attempting to fetch from [{tablename}] at {self.document_id}...')
+        logger.info(f'GRIST: Attempting to fetch from [{tablename}] at {self.document_id}...')
         records = self.api.fetch_table(tablename, filters=filters)
-        logger.info(f'API: Successfully fetched {len(records)} records from [{tablename}].')
+        logger.info(f'GRIST: Successfully fetched {len(records)} records from [{tablename}].')
         return records
 
     def fetch_table_pd(self, tablename: str, filters: Dict[str, Any] = None, colnames: List[str] = None) -> pandas.DataFrame:
@@ -75,9 +75,9 @@ class GristAPIWrapper:
                 confirm_submit = input(f"API: Are you sure you wish to ADD these record(s) to [{tablename}]? ")
                 if confirm_submit.lower() not in ["y", "yes"]:
                     return None
-            logger.info(f'API: Attempting to ADD new records to [{tablename}] at {self.document_id}...')
+            logger.info(f'GRIST: Attempting to ADD new records to [{tablename}] at {self.document_id}...')
             response = self.api.add_records(tablename, record_dicts=record_dicts, chunk_size=chunk_size)
-            logger.info(f'API: Successfully added {len(response)} records to [{tablename}].')
+            logger.info(f'GRIST: Successfully added {len(response)} records to [{tablename}].')
             return response
 
     def update_records(self, tablename: str, record_dicts: List[Dict[str, Any]], group_if_needed: bool = False, chunk_size: int = None, mock: bool = True, prompt: bool = True) -> None:
@@ -89,7 +89,7 @@ class GristAPIWrapper:
                 confirm_submit = input(f"API: Are you sure you wish to PATCH these record(s) in [{tablename}]? ")
                 if confirm_submit.lower() not in ["y", "yes"]:
                     return None
-            logger.info(f'API: Attempting to PATCH records in [{tablename}] at {self.document_id}...')
+            logger.info(f'GRIST: Attempting to PATCH records in [{tablename}] at {self.document_id}...')
             response = self.api.update_records(tablename, record_dicts=record_dicts, chunk_size=chunk_size)
-            logger.info(f'API: Successfully patched {len(record_dicts)} records at [{tablename}].')
+            logger.info(f'GRIST: Successfully patched {len(record_dicts)} records at [{tablename}].')
             return response

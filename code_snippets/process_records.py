@@ -63,16 +63,72 @@ def is_CYOA(row):
 	removed = str(row['removed_by_category'])
 	flair_text = str(row['link_flair_text'])
 	if len(removed) > 0:
-		return "No"
+		return False
 	for flair in GOOD_FLAIR:
 		if flair in flair_text:
-			return "Yes"
+			return True
 	for flair in BAD_FLAIR:
 		if flair in flair_text:
-			return "No"
+			return False
 	return ""
 
 def url_list_to_str(url_list):
-	if len(url_list) > 0:
-		return ", ".join(url_list)
+	try:
+		if len(url_list) > 0:
+			return ", ".join(url_list)
+
+	except:
+		print(url_list)
 	return ""
+
+def main(args):
+	# Process arguments
+	filename = args.record_file
+
+	d = pandas.read_csv(filename)
+	d.fillna('', inplace=True)
+
+	urls = d.apply(extract_urls, axis=1)
+	d['imgur_url'] = urls.apply(get_single_url, regex="imgur.")
+	d['imgchest_url'] = urls.apply(get_single_url, regex="imgchest.")
+	d['ireddit_url'] = urls.apply(get_single_url, regex="i.redd.it")
+	d['neocities_url'] = urls.apply(get_single_url, regex="neocities")
+	d['urls'] = urls.apply(url_list_to_str)
+	d['is_cyoa'] = d.apply(is_CYOA, axis=1)
+	d['permalink'] = "https://www.reddit.com" + d['permalink']
+	d['date_posted'] = d['created_utc'].apply(datetime.datetime.fromtimestamp)
+	d['date_scraped'] = d['parser_timestamp'].apply(datetime.datetime.fromtimestamp)
+
+	d = d.sort_values(by = 'created_utc', ascending=True)
+
+	d = d[[
+		'is_cyoa',
+		'title',
+		'date_posted',
+		'posted_by',
+		'subreddit',
+		'link_flair_text',
+		'selftext',
+		'num_comments',
+		'score',
+		'upvote_ratio',
+		'permalink',
+		'imgur_url',
+		'imgchest_url',
+		'neocities_url',
+		'ireddit_url',
+		'urls',
+		'removed_by_category',
+		'is_self',
+		'over_18',
+		'date_scraped',
+		'id'
+	]]
+
+	d.to_csv("processed_" + str(int(time.time())) + ".csv", lineterminator='\r\n', index=False)
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser()
+	parser.add_argument('record_file')
+	args = parser.parse_args()
+	main(args)

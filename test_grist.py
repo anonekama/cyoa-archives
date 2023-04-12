@@ -4,6 +4,7 @@ import pathlib
 import re
 import json
 import logging
+import pprint
 
 from grist_api import GristDocAPI
 import pandas
@@ -11,8 +12,10 @@ import yaml
 from strsimpy.metric_lcs import MetricLCS
 from strsimpy.ngram import NGram
 
-from cyoa_archives.scrapers.reddit_scraper import scrape_subreddit
 from cyoa_archives.grist.api import GristAPIWrapper
+from cyoa_archives.scrapers.praw import PrawAPIWrapper
+from cyoa_archives.scrapers.pulseshift import PulseshiftAPIWrapper
+from cyoa_archives.scrapers.scraper_utils import extract_urls_from_df, get_single_url, extract_is_CYOA
 
 def main(config, subreddit, password, limit = None):
 
@@ -34,11 +37,34 @@ def main(config, subreddit, password, limit = None):
         "document_id": documentid,
         "api_key": apikey
     })
-    print(api.document_id)
-    print(api2.document_id)
 
-    records_pd = api.fetch_table_pd('CYOAs', colnames=['id', 'uuid', 'Official_Title'])
-    print(records_pd)
+    pulse = PulseshiftAPIWrapper.load_config(config.get('reddit_scraper'))
+    r = pulse.rest_get_df('nsfwcyoa', size=25, before=1680401789)
+    # r = pulse.scrape_loop_d('nsfwcyoa', size=300, after=1617329789)
+    # dat = extract_urls_from_df(r, config.get('reddit_scraper'))
+    # s = dat.apply(get_single_url, regex='imgur.')
+    s = extract_is_CYOA(r, config.get('reddit_scraper'))
+    print(s)
+    # r.to_csv("temp.csv")
+
+    # p = PrawAPIWrapper(username=username, password=password, client_id=clientid, client_secret=clientsecret, user_agent=useragent)
+    """
+    pc_config = config.get('reddit_scraper')
+    pc_config['password'] = password
+    pc = PrawAPIWrapper.load_config(pc_config)
+    # results = pc.scrape_pd('nsfwcyoa', limit=25, colnames=['id', 'title'])
+    results = pc.scrape_pd('nsfwcyoa', limit=25)
+    # print(results)
+    results.to_csv("temp.csv")
+    """
+    # for r in results:
+    #     pprint.pprint(vars(r))
+    #     print(getattr(r, 'url'))
+
+    # getattr(object, attrname)
+
+    # records_pd = api.fetch_table_pd('CYOAs', colnames=['id', 'uuid', 'Official_Title'])
+    # print(records_pd)
 
     # mock = api.add_records('Test', [{'A': 123}])
     # prompt = api.add_records('Test', [{'A': 123}], mock=False)
