@@ -13,7 +13,7 @@ import praw
 from collections import OrderedDict
 from typing import Type, List, Dict
 
-from .scraper_utils import clean_reddit_text
+from .utils import clean_reddit_text
 
 logger = logging.getLogger(__name__)
 

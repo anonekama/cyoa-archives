@@ -15,11 +15,11 @@ from strsimpy.ngram import NGram
 from cyoa_archives.grist.api import GristAPIWrapper
 from cyoa_archives.scrapers.praw import PrawAPIWrapper
 from cyoa_archives.scrapers.pulseshift import PulseshiftAPIWrapper
-from cyoa_archives.scrapers.scraper_utils import extract_urls_from_df, get_single_url, extract_is_CYOA
+# from cyoa_archives.scrapers.scraper_utils import extract_urls_from_df, get_single_url, extract_is_CYOA
 
 def main(config, subreddit, password, limit = None):
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
     # Get variables from config
@@ -38,13 +38,14 @@ def main(config, subreddit, password, limit = None):
         "api_key": apikey
     })
 
-    pulse = PulseshiftAPIWrapper.load_config(config.get('reddit_scraper'))
-    r = pulse.rest_get_df('nsfwcyoa', size=25, before=1680401789)
+    pulse = PulseshiftAPIWrapper(config.get('reddit_scraper'))
+    r = pulse.scrape('nsfwcyoa', size=100, before=1680401789)
+    print(r[-1].json.get('static_url'))
     # r = pulse.scrape_loop_d('nsfwcyoa', size=300, after=1617329789)
     # dat = extract_urls_from_df(r, config.get('reddit_scraper'))
     # s = dat.apply(get_single_url, regex='imgur.')
-    s = extract_is_CYOA(r, config.get('reddit_scraper'))
-    print(s)
+    # s = extract_is_CYOA(r, config.get('reddit_scraper'))
+    # pprint.pprint(r)
     # r.to_csv("temp.csv")
 
     # p = PrawAPIWrapper(username=username, password=password, client_id=clientid, client_secret=clientsecret, user_agent=useragent)
