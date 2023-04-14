@@ -10,14 +10,11 @@ Typical usage example:
 """
 
 import logging
-import pandas
 import requests
 import time
-import pprint
 
 from typing import Optional, TypeVar, List, Dict, Any
 
-from .utils import object_to_df
 from .submission import RedditSubmission
 
 logger = logging.getLogger(__name__)
@@ -45,7 +42,7 @@ class PulseshiftAPIWrapper:
         :param size: Maximum number of results to fetch. If None, allow default behavior.
         :param before: Fetch  results before unix timestamp.
         :param after: Fetch results after unix timestamp.
-        :return: A list of .
+        :return: A list of Reddit Submission objects.
         """
         logger.info(f'PULSESHIFT: Attempting to fetch submissions '
                     f'from [{subreddit_name}] (limit={size}) ({before}-{after})...')
@@ -66,13 +63,12 @@ class PulseshiftAPIWrapper:
         data = r.json().get('data')
         l: List[RedditSubmission] = []
         for row in data:
-            rs = RedditSubmission(row)
+            rs = RedditSubmission(row, remove_low_score=True)
             l.append(rs)
         logger.info(f'PULSESHIFT: Successfully fetched {len(data)} submissions from [{subreddit_name}].')
         return l
 
-    def scrape(self, subreddit_name: str, size: int = None, before: int = None, after: int = 0) -> List[
-        RedditSubmission]:
+    def scrape(self, subreddit_name: str, size: int = None, before: int = None, after: int = 0) -> List[Dict]:
         # Initalize values for while loop
         results = []
         num_errors = 0
@@ -88,17 +84,20 @@ class PulseshiftAPIWrapper:
             time.sleep(self.config.get('pulseshift_sleep_interval'))
 
             # Make request
-        # try:
-            response = self.rest_get(subreddit_name=subreddit_name, size=size, before=last_timestamp, after=after)
-            results = results + response
-            if len(response) > 0:
-                last_timestamp = response[-1].json.get('created_utc')
-            elif len(response) < chunk_size:
-                break
-        # except Exception as e:
-        #    logger.warning(f'PULSESHIFT: Failed to complete request at {last_timestamp} from [{subreddit_name}].')
-        #    logger.warning(f'Exception: {e}')
-            num_errors = num_errors + 1
+            try:
+                response = self.rest_get(subreddit_name=subreddit_name, size=size, before=last_timestamp, after=after)
+                results = results + response
+                if len(response) > 0:
+                    last_timestamp = response[-1].json.get('created_utc')
+                elif len(response) < chunk_size:
+                    break
+            except Exception as e:
+                logger.warning(f'PULSESHIFT: Failed to complete request at {last_timestamp} from [{subreddit_name}].')
+                logger.warning(f'Exception: {e}')
+                num_errors = num_errors + 1
 
         logger.info(f'PULSESHIFT: Fetched a total of {len(results)} submissions from [{subreddit_name}].')
-        return results
+        as_dict_list: List[Dict] = []
+        for result in results:
+            as_dict_list.append(dict(result))
+        return as_dict_list

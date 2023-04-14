@@ -34,7 +34,7 @@ class RedditSubmission:
     # Class variable storing configuration
     CONFIG = None
 
-    def __init__(self, json_data: Dict[str, Any]):
+    def __init__(self, json_data: Dict[str, Any], remove_low_score: bool = False):
         """Initializes an instance of RedditSubmission.
 
         :param json_data: JSON representation of a reddit submission returned by API.
@@ -51,6 +51,10 @@ class RedditSubmission:
             raise ValueError(f'Reddit submission lacks (id) attribute.')
         if 'created_utc' not in self.json:
             raise ValueError(f'Reddit submission lacks (created_utc) attribute.')
+        if 'author' not in self.json:
+            raise ValueError(f'Reddit submission lacks (author) attribute.')
+        if 'subreddit' not in self.json:
+            raise ValueError(f'Reddit submission lacks (subreddit) attribute.')
         if 'permalink' not in self.json:
             raise ValueError(f'Reddit submission lacks (permalink) attribute.')
         if 'url' not in self.json:
@@ -59,8 +63,6 @@ class RedditSubmission:
             raise ValueError(f'Reddit submission lacks (title) attribute.')
         if 'is_self' not in self.json:
             raise ValueError(f'Reddit submission lacks (is_self) attribute.')
-        if 'locked' not in self.json:
-            raise ValueError(f'Reddit submission lacks (locked) attribute.')
         if 'num_comments' not in self.json:
             raise ValueError(f'Reddit submission lacks (num_comments) attribute.')
         if 'score' not in self.json:
@@ -70,19 +72,36 @@ class RedditSubmission:
         if 'selftext' not in self.json:
             raise ValueError(f'Reddit submission lacks (selftext) attribute.')
         if 'link_flair_text' not in self.json:
-            raise ValueError(f'Reddit submission lacks (link_flair_text) attribute.')
+            self.json['link_flair_text'] = None
         if 'removed_by_category' not in self.json:
-            raise ValueError(f'Reddit submission lacks (removed_by_category) attribute.')
+            self.json['removed_by_category'] = None
+        if 'locked' not in self.json:
+            self.json['locked'] = None
 
         # Perform any processing
         self.json['urls'] = self.extract_urls()
         self.json['urls'] = self.parse_urls()
         self.json['static_url'] = self.get_first_url('static')
         self.json['interactive_url'] = self.get_first_url('interactive')
-        self.json['is_cyoa'] = self.parse_is_cyoa()
+        self.json['is_cyoa'] = self.parse_is_cyoa(remove_low_score)
         self.json['selftext'] = self.clean_text('selftext')
         self.json['permalink'] = self.CONFIG.get('reddit_url') + self.json['permalink']
+        self.json['author'] = str(self.json['author'])
+        self.json['subreddit'] = str(self.json['subreddit'])
+
+        # Final changes
+        self.json['urls'] = ', '.join(self.json['urls'])
+        self.json['r_id'] = self.json['id']
+        self.json.pop('id')
         self.json['parser_timestamp'] = int(time.time())
+
+
+    def __iter__(self):
+        for key, value in self.json.items():
+            yield key, value
+
+    def __dict__(self):
+        return self.json
 
     @classmethod
     def load_config(cls, config_object: Dict[str, Any]) -> None:
@@ -99,7 +118,8 @@ class RedditSubmission:
 
     def extract_urls(self) -> List[str]:
         # Append url text to selftext
-        text = self.json.get('selftext') + ' ' + self.json.get('url')
+        url = self.json.get('url') if self.json.get('url') else ""
+        text = self.json.get('selftext') + ' ' + url
 
         # Next, extract urls using regex
         text = text.replace('\\', '')
@@ -135,11 +155,11 @@ class RedditSubmission:
     def get_first_url(self, cyoa_type) -> Optional[str]:
         if self.CONFIG:
             urls = self.json.get('urls')
-            static_url_substrings = self.CONFIG.get('good_urls').get(cyoa_type)
+            url_substrings = self.CONFIG.get('good_urls').get(cyoa_type)
             image_urls = []
             gallery_urls = []
             for url in urls:
-                for substring in static_url_substrings:
+                for substring in url_substrings:
                     if substring in url:
                         is_gallery = True
                         for extension in ['.jpg', '.jpeg', '.png']:
@@ -149,13 +169,14 @@ class RedditSubmission:
                                 break
                         if is_gallery:
                             gallery_urls.append(url)
+                        break
             if len(gallery_urls) > 0:
                 return gallery_urls[0]
             elif len(image_urls) == 1:
                 return image_urls[0]
         return None
 
-    def parse_is_cyoa(self, remove_low_score: bool = True) -> str:
+    def parse_is_cyoa(self, remove_low_score: bool = False) -> str:
         # Check if post is removed
         if self.json.get('removed_by_category') or self.json.get('locked'):
             return NO
@@ -204,5 +225,8 @@ class RedditSubmission:
 
         return NULL
 
-    def __repr__(self):
-        return json.dumps(self.json)
+    def __dict__(self):
+        return self.json
+
+    #def __repr__(self):
+    #    return json.dumps(self.json)
