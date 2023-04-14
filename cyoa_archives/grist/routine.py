@@ -40,7 +40,7 @@ def praw_fetch_add_update(config):
     praw = PrawAPIWrapper(config.get('reddit_scraper'))
 
     grist_pd = api.fetch_table_pd('Records', col_names=['id', 'r_id'])
-    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'Official_Title'])
+    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'official_title'])
 
     for subreddit in ['nsfwcyoa', 'makeyourchoice']:
 
@@ -60,7 +60,7 @@ def praw_fetch_add_update(config):
         api.update_records('Records', update_object, mock=False, prompt=False)
 
         # Next add new records
-        new_pd = praw_pd[~praw_pd['r_id'].isin(grist_pd['r_id'])]
+        new_pd = praw_pd.loc[~praw_pd['r_id'].isin(grist_pd['r_id'])]
         new_pd['cyoa'] = new_pd['title'].apply(find_closest_cyoa, cyoa_df=grist_cyoa_pd)
         add_pd = new_pd[['author', 'created_utc', 'cyoa', 'r_id', 'is_self', 'link_flair_text', 'num_comments',
                             'permalink', 'removed_by_category', 'score', 'selftext', 'subreddit', 'title',
