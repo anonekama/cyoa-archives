@@ -18,8 +18,8 @@ def find_closest_cyoa(title, cyoa_df):
     processed_text = re.sub(r'[^A-Za-z0-9 ]+', '', processed_text)
     processed_text = " ".join(processed_text.split()).replace('CYOA', '')
     if processed_text:
-        mlcs = cyoa_df['Official_Title'].apply(lambda x: metriclcs.distance(processed_text, x))
-        fg = cyoa_df['Official_Title'].apply(lambda x: fourgram.distance(processed_text, x))
+        mlcs = cyoa_df['official_title'].apply(lambda x: metriclcs.distance(processed_text, x))
+        fg = cyoa_df['official_title'].apply(lambda x: fourgram.distance(processed_text, x))
         st = pd.DataFrame({
             'cyoa': cyoa_df['id'],
             'mlcs': mlcs,
