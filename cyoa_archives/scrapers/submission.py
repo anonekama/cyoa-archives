@@ -220,7 +220,7 @@ class RedditSubmission:
                 # Check if flair is good
                 good_flair_substrings = self.CONFIG.get('good_flair')
                 for substring in good_flair_substrings:
-                    if substring in self.json.get('title'):
+                    if substring in self.json.get('link_flair_text'):
                         return YES
 
         return NULL
