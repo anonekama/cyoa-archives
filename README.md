@@ -16,4 +16,16 @@ Next start a virtual environment:
 
 . env/bin/activate`
 
+clone https://github.com/KichangKim/DeepDanbooru
+
+setup and download model
+
+git clone https://github.com/tensorflow/io.git
+
+cd io
+
+python setup.py -q bdist_wheel
+
+https://medium.com/dive-into-ml-ai/installing-tensorflow-natively-on-mac-m1-in-2022-1357e9b7a201
+
 ## Usage

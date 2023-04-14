@@ -22,6 +22,7 @@ contourpy==1.0.7
 cycler==0.11.0
 debugpy @ file:///Users/runner/miniforge3/conda-bld/debugpy_1680755631236/work
 decorator @ file:///home/conda/feedstock_root/build_artifacts/decorator_1641555617451/work
+deepdanbooru @ file:///Users/jyzhou/src/cyoa/DeepDanbooru
 defusedxml @ file:///home/conda/feedstock_root/build_artifacts/defusedxml_1615232257335/work
 dm-tree==0.1.8
 editdistance==0.6.2
@@ -57,7 +58,6 @@ jax==0.4.8
 jedi @ file:///home/conda/feedstock_root/build_artifacts/jedi_1669134318875/work
 Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/jinja2_1654302431367/work
 jsonschema @ file:///home/conda/feedstock_root/build_artifacts/jsonschema-meta_1669810440410/work
-jupyter @ file:///Users/runner/miniforge3/conda-bld/jupyter_1670249744855/work
 jupyter-console @ file:///home/conda/feedstock_root/build_artifacts/jupyter_console_1678118109161/work
 jupyter-events @ file:///home/conda/feedstock_root/build_artifacts/jupyter_events_1673559782596/work
 jupyter_client @ file:///home/conda/feedstock_root/build_artifacts/jupyter_client_1681432441054/work
@@ -142,6 +142,7 @@ tensorboard==2.12.2
 tensorboard-data-server==0.7.0
 tensorboard-plugin-wit==1.8.1
 tensorflow-estimator==2.12.0
+tensorflow-io @ file:///Users/jyzhou/src/cyoa/io-0.32.0/dist/tensorflow_io-0.32.0-cp38-cp38-macosx_11_0_arm64.whl
 tensorflow-macos==2.12.0
 tensorflow-metadata==1.13.1
 tensorflow-metal==0.8.0
