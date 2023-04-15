@@ -6,6 +6,7 @@ __pycache__
 
 config.yaml
 
+cyoa_env/
 env_cyoa_archives/
 temp/
 .ipynb_checkpoints/

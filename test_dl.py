@@ -14,10 +14,9 @@ import pandas as pd
 import yaml
 
 import keras_ocr
-import pytesseract
 import tensorflow as tf
 
-MAX_WIDTH = 1281
+MAX_WIDTH = 1280
 INPUT_SIZE = (512, 512)
 SLIDING_WINDOW_DIM = (512, 512)
 SLIDING_WINDOW_STEP = 256
@@ -26,6 +25,7 @@ DD_THRESHOLD = 0.9
 DD_REPORT_THRESHOLD = 0.03
 KB_THRESHOLD = 0.3
 
+from cyoa_archives.predictor.image import CyoaImage
 
 def get_distance(predictions):
     """
@@ -93,7 +93,8 @@ def main(config):
     logger = logging.getLogger(__name__)
 
     tempdir = pathlib.Path('temp/')
-    shutil.rmtree(tempdir.resolve())
+    if tempdir.exists():
+        shutil.rmtree(tempdir.resolve())
 
     subprocess.run(['gallery-dl', 'https://imgur.com/gallery/QLfAhNT', '-d', 'temp/'], universal_newlines=True)
     # subprocess.run(['gallery-dl', 'https://www.reddit.com/gallery/12kylsi', '-d', 'temp/'], universal_newlines=True)
@@ -111,34 +112,20 @@ def main(config):
     rois = []
     for i, image_fn in enumerate(imagepaths):
         print(image_fn)
-        cyoa_page = cv2.imread(str(image_fn.resolve()))
-        img = cv2.resize(cyoa_page, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        img = cv2.bilateralFilter(img,9,75,75)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        CyoaImage.load_config(config.get('predictor'))
+        cyoa_image = CyoaImage(image_fn)
+
+        # cyoa_image = cv2.imread(str(image_fn.resolve()))
+        # img = cv2.resize(cyoa_page, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        # img = cv2.bilateralFilter(img,9,75,75)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         #cv2.imshow('image', img)
         #cv2.waitKey(0)
-        img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 2)
-        cyoa_text = pytesseract.image_to_string(img, config='--psm 11')
-        with open('tess.txt', 'w') as f:
-            f.write(cyoa_text)
-
-        # Resize tall pages (height > width)
-        (H, W) = cyoa_page.shape[:2]
-        if H > W and W > MAX_WIDTH:
-            scale_percent = MAX_WIDTH / W
-            dim = (int(W * scale_percent), int(H * scale_percent))
-            cyoa_page = cv2.resize(cyoa_page, dim, interpolation=cv2.INTER_AREA)
-            (H, W) = cyoa_page.shape[:2]
-
-        # Sliding window
-        for y in range(0, H - SLIDING_WINDOW_DIM[1], SLIDING_WINDOW_STEP):
-            for x in range(0, W - SLIDING_WINDOW_DIM[0], SLIDING_WINDOW_STEP):
-                x2 = x + SLIDING_WINDOW_DIM[0]
-                y2 = y + SLIDING_WINDOW_DIM[1]
-                roi = cv2.resize(cyoa_page[y:y2, x:x2], INPUT_SIZE)
-                roi_fn = os.path.join(tempdir.resolve(), str(i) + '_' + str(x) + '_' + str(y) + '_' + str(x2) + '_' + str(y2) + '.jpg')
-                cv2.imwrite(roi_fn, roi)
-                rois.append(roi_fn)
+        # img = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 2)
+        # cyoa_text = pytesseract.image_to_string(img, config='--psm 11')
+        # with open('tess.txt', 'w') as f:
+        #     f.write(cyoa_text)
 
         #for roi in rois[0:10]:
         #    cyoa_page = cv2.imread(roi)
@@ -149,6 +136,7 @@ def main(config):
         #    cyoa_text = pytesseract.image_to_string(img, config='--psm 11')
         #    print(cyoa_text)
 
+        """
         predictions = detect_w_keras(rois[0])
 
         predictions = get_distance(predictions)
@@ -165,6 +153,7 @@ def main(config):
                 for each in row:
                     ordered_preds.append(each['text'])
         print(ordered_preds)
+        """
 
         break
 

@@ -1,9 +1,32 @@
 # cyoa-archives
 
 ## Requirements
-Using python 3.7.16
+
+Using python 3.8.2
+
+Tensorflow
 
 ## Installation
+
+Via PIP
+
+* pandas
+* praw
+* PyYAML
+* redditcleaner
+* grist-api
+* strsimpy
+* opencv-contrib-pythong
+* gallery-dl
+
+Via github
+
+* https://github.com/KichangKim/DeepDanbooru (and trained model)
+
+Via machine-specific instructions
+
+* Tensorflow
+* Keras OCR
 
 Use these installation instructiosn:
 https://caffeinedev.medium.com/how-to-install-tensorflow-on-m1-mac-8e9b91d93706
@@ -16,7 +39,6 @@ Next start a virtual environment:
 
 . env/bin/activate`
 
-clone https://github.com/KichangKim/DeepDanbooru
 
 setup and download model
 
