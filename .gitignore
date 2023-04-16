@@ -4,6 +4,8 @@ __pycache__
 
 *.csv
 *.jpg
+*.png
+*.jpeg
 
 config.yaml
 

@@ -6,6 +6,8 @@ from typing import Optional, Dict, List, Any
 import cv2
 import numpy as np
 
+from .cv import CvChunk
+
 logger = logging.getLogger(__name__)
 
 class CyoaImage:
@@ -53,10 +55,8 @@ class CyoaImage:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(gray, (KERNAL_SIZE, KERNAL_SIZE), 0)
 
-        # Apply Otsu's automatic thresholding
-        (T, thresh) = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        #
 
-        pass
 
     def resize_image(self, width: Optional[int] = None, do_resize_wide: Optional[bool] = False) -> None:
         """Resize input image to a uniform size comparable for all CYOAs in a project."""
