@@ -22,7 +22,11 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
     #image_fn = pathlib.Path('test.png')
+=======
+    image_fn = pathlib.Path('test13.jpg')
+>>>>>>> 4674beaa280916ab25c346742ba97e9bee4778ca
     #image_fn = pathlib.Path('test2.jpeg')
     image_fn = pathlib.Path('test3.jpeg') # pass
     print(image_fn)
@@ -77,10 +81,23 @@ def main():
     #new_start = int(width * MARGIN / 2)
     #new_end = int(width - width * MARGIN / 2)
 
+<<<<<<< HEAD
     #chunk = CvChunk(blurred[0:height, new_start:new_end], 0, 0)
     #min_size = int(width / 3) # Accept a minimum of 12 columns
     #min_thickness = int(0.02 * width)
     #chunk.generate_subchunks(min_size, min_thickness)
+=======
+    chunk = CvChunk(blurred[0:height, new_start:new_end], 0, 0)
+    min_size = width / 2
+    min_thickness = 5
+    chunk.generate_subchunks(min_size, min_thickness)
+>>>>>>> 4674beaa280916ab25c346742ba97e9bee4778ca
+
+    # Apply loose chunking for ocr
+
+    # Then apply greedy chunking for (rows, then columns) for
+
+
 
     # ci = CyoaImage.chunk_image(image)
 
