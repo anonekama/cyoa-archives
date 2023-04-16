@@ -1,11 +1,11 @@
 import logging
-import math
-import statistics
+import numpy
 from typing import List, Dict
 
+import cv2
 import keras_ocr
 
-from .roi import CyoaROI
+from .roi import CyoaROI, BoundingBox, Chunk
 
 logger = logging.getLogger(__name__)
 
@@ -13,165 +13,205 @@ class KerasOCR:
     """Given a list of ROIs, fetch the text"""
 
     PIPELINE = keras_ocr.pipeline.Pipeline()
+    img_xmax = None
+    img_ymax = None
+    cv = None
 
     @classmethod
-    def read_rois(cls, rois: List[CyoaROI]):
-        all_detections = []
-        for i, roi in enumerate(rois[0:10]):
-            roi_detections = cls.read_roi(roi)
-            logger.info(f'Read {len(roi_detections)} detections in {i}/{len(rois)} rois.')
-            all_detections.extend(roi_detections)
-        logger.info(f'Read a total of {len(all_detections)} detections.')
+    def set_image_dim(cls, x, y, cv):
+        cls.img_xmax = x
+        cls.img_ymax = y
+        cls.cv =cv
+        BoundingBox.set_image_dim(x, y)
+        Chunk.set_image_dim(x, y)
 
-        # Get char_size
-        char_size = statistics.median(map(lambda x: x['char_size'], all_detections))
-        logger.info(char_size)
+    @classmethod
+    def read_rois(cls, rois: List[CyoaROI], padding_factor: float = 1):
+        """Read a list of ROIs, stitch together, and get text in a natural order.
 
-        # Expand rois by ~2 characters in each direction and get chunks
-        chunks = cls.chunk_rois(all_detections, char_size * 2)
+        :param rois: A list of ROIs (cv images)
+        :param padding_factor: How many character units to pad each bounding box
+        :return:
+        """
+        # First, we get a list of all bounding boxes in all ROIs
+        all_bounding_boxes = []
+        for i, roi in enumerate(rois[0:21]):
+            roi_boxes = cls.read_roi(roi)
+            logger.info(f'Detected {len(roi_boxes)} words in {i}/{len(rois)} rois.')
+            all_bounding_boxes.extend(roi_boxes)
+        logger.info(f'Read a total of {len(all_bounding_boxes)} detections.')
+
+        # Sort the bounding boxes on the yaxis
+        all_bboxes = sorted(all_bounding_boxes, key=lambda b: b.ymin)
+
+        # Now, we chunk ROIs, after expanding each bounding box by a factor
+        chunks = cls.chunk_rois(all_bboxes, 1)
+
+        # Lets print the chunks for debuging purposes
         logger.info(f'Chunks: {len(chunks)}')
+        for i, chunk in enumerate(chunks):
+            cv = cls.cv[chunk.ymin:chunk.ymax, chunk.xmin:chunk.xmax]
+            cv2.imwrite(f'chunk_{i}.jpg', cv)
 
-        # Chunk rois
-        for chunk in chunks:
-            s = []
-            for r in chunk['rois']:
-                s.append(r['text'])
-            # logger.info(f'ChunkText: {s}')
-            rows = get_rows(chunk, char_size)
-            logger.info(f'Rows: {len(rows)}')
-            for row in rows:
-                text = []
-                for roi in row:
-                    text.append(roi['text'])
-                logger.info(f'Text: {text}')
+        # Perform non-maxima suppression to remove overlapping bounding boxes
+        # Also print to text
+        for chunk in sorted(chunks, key=lambda c: c.get_distance()):
+            #logger.info(f'BEFORE: {len(chunk.boxes)}')
+            # Perform suppression on bounding boxes
+            logger.info(chunk.to_string())
+            chunk.boxes = cls.nonmaxima_suppression(chunk.boxes, 0.7)
+            # logger.info(f'AFTER: {len(bboxes)}')
+            logger.info(chunk.to_string())
 
-
-        # Overlap rois
-        #cls.overlap_rois(all_detections)
-
-        return all_detections
-
-
-
-        # Order rois in each chunk
 
     @classmethod
-    def read_roi(cls, roi: CyoaROI):
+    def read_roi(cls, roi: CyoaROI) -> List[BoundingBox]:
+        """Runs Keras OCR on a single ROI image.
+
+        :param roi: A CyoaROI object representing a CV2 ROI image.
+        :return: A list of BoundingBox's representing text and coordinates
+        """
         # Perform keras ocr inference
         read_image = keras_ocr.tools.read(roi.roi)
         predictions = cls.PIPELINE.recognize([read_image])
 
-        x0, y0 = 0, 0
-        detections = []
+        bounding_boxes = []
         for group in predictions[0]:
+            text = group[0]
+            if len(text):
+                top_left_x, top_left_y = group[1][0]
+                bottom_right_x, bottom_right_y = group[1][1]
+                bbox = BoundingBox(
+                    text=text,
+                    roi_x=roi.x,
+                    roi_y=roi.y,
+                    xmin=top_left_x,
+                    xmax=bottom_right_x,
+                    ymin=bottom_right_y,
+                    ymax=top_left_y
+                )
+                if bbox.is_valid():
+                    bounding_boxes.append(bbox)
 
-            # Update coordinates to larger image; also add some fuzz
-            top_left_x, top_left_y = group[1][0]
-            bottom_right_x, bottom_right_y = group[1][1]
-            top_left_x = top_left_x + roi.x
-            top_left_y = top_left_y + roi.y
-            bottom_right_x = bottom_right_x + roi.x
-            bottom_right_y = bottom_right_y + roi.y
-
-            # Append all results
-            detections.append({
-                'text': group[0],
-                'xmin': top_left_x,
-                'ymax': top_left_y,
-                'xmax': bottom_right_x,
-                'ymin': bottom_right_y,
-                'char_size': int((bottom_right_x - top_left_x) / len(group[0]))
-            })
-
-        return detections
+        return bounding_boxes
 
     @classmethod
-    def chunk_rois(cls, rois: List[Dict], char_size: int) -> List[List]:
+    def chunk_rois(cls, rois: List[BoundingBox], padding_factor: float) -> List[Chunk]:
+        """Given a list of bounding boxes, make a union of all intersecting boxes.
+
+        The padding factor is a value to multiply char_length units by.
+        Since characters are taller than they are wide, define an arbitrary height-width
+        radio (e.g. 0.7) so that the padding is greater on the y-axis.
+
+        """
         chunks = []
+        queue = []
+
+        # First, we add all rois to the queue and convert to a chunk datatype
+        # We also compute the median char_length
+        char_length = []
         for roi in rois:
-            found_overlap = False
-            for chunk in chunks:
-                overlap = calculate_overlap(roi, chunk, char_size, char_size)
-                if overlap:
-                    chunk['rois'].append(roi)
-                    chunk['xmax'] = max(chunk['xmax'], roi['xmax'])
-                    chunk['xmin'] = min(chunk['xmin'], roi['xmin'])
-                    chunk['ymax'] = max(chunk['ymax'], roi['ymax'])
-                    chunk['ymin'] = min(chunk['ymin'], roi['ymin'])
-                    found_overlap = True
-                    break
-            if not found_overlap:
-                chunks.append({
-                    'rois': [roi],
-                    'xmax': roi['xmax'],
-                    'xmin': roi['xmin'],
-                    'ymax': roi['ymax'],
-                    'ymin': roi['ymin']
-                })
+            char_length.append(roi.len_char)
+            chunk = Chunk.from_bbox(roi)
+            if chunk.is_valid():
+                queue.append(chunk)
+        median_char_width = numpy.median(char_length)
+        logger.info(f'Char-Len: {median_char_width}')
+        logger.info(f'Starting with: {len(queue)} queue')
 
-        # Merge overlapping chunks
-        merge_chunks = chunks
-        merge_event = True
-        while merge_event:
-            merge_event = False
-            for i in range(len(merge_chunks)):
-                for j in range(i+1, len(merge_chunks)):
-                    overlap = calculate_overlap(chunks[i], chunks[j])
-                    if overlap:
-                        merge_chunks[i]['rois'] = merge_chunks[i]['rois'] + merge_chunks[j]['rois']
-                        merge_chunks[i]['xmax'] = max(merge_chunks[i]['xmax'], merge_chunks[j]['xmax'])
-                        merge_chunks[i]['xmin'] = min(merge_chunks[i]['xmin'], merge_chunks[j]['xmin'])
-                        merge_chunks[i]['ymax'] = max(merge_chunks[i]['ymax'], merge_chunks[j]['ymax'])
-                        merge_chunks[i]['ymin'] = min(merge_chunks[i]['ymin'], merge_chunks[j]['ymin'])
-                        merge_chunks.pop(j)
-                        merge_event = True
-                        break
-                if merge_event:
-                    break
+        # Pad all chunks and transform so that the padding is greater on the y-axis
+        pad_x = int(median_char_width * padding_factor)
+        pad_y = int(median_char_width * padding_factor / 0.7)
+        logger.info(f'Padding: {pad_x} {pad_y}')
+        for item in queue:
+            item.pad_xy(pad_x, pad_y)
 
-        return merge_chunks
+        # We loop through the queue until it is empty
+        while len(queue) > 0:
+            this_item = queue[0]
+            queue_end = queue[1:]
+            # logger.info(f'Queue Length: {queue_end}')
 
+            # Break loop on last item
+            if len(queue_end) == 0:
+                chunks.append(this_item)
+                logger.info(f'Chunk: {(this_item.xmax - this_item.xmin)} x {(this_item.ymax - this_item.ymin)}')
+                break
+
+            intersect_set = Chunk.intersect_set(this_item, queue_end)
+            overlap_list_idx = numpy.where(intersect_set)[0]
+            remainder_list_idx = numpy.where(~intersect_set)[0]
+            logger.info(f'Chunks: {len(chunks)} - Before: {len(queue_end)} - Overlap: {len(overlap_list_idx)} - Remainder: {len(remainder_list_idx)}')
+
+            # If there are any matches by intersection...
+            if len(overlap_list_idx) > 0:
+
+                overlap_list = []
+                for i in overlap_list_idx:
+                    overlap_list.append(queue_end[i])
+
+                # Create a union of the intersecting chunks
+                # logger.info(overlap_list)
+                union = Chunk.union(overlap_list)
+                logger.info(f'Union: {(union.xmax - union.xmin)} x {(union.ymax - union.ymin)}')
+
+                # Put the chunk back into the remaining queue
+                remainder_list = []
+                for i in remainder_list_idx:
+                    remainder_list.append(queue_end[i])
+                remainder_list.append(union)
+
+                # Reset the queue
+                queue = remainder_list
+
+            # If there are no matches, we report it as a distinct chunk
+            else:
+                chunks.append(this_item)
+                logger.info(f'Chunk: {(this_item.xmax - this_item.xmin)} x {(this_item.ymax - this_item.ymin)}')
+                queue = queue_end
+
+        return chunks
 
     @classmethod
-    def overlap_rois(cls, rois: List[Dict], char_size):
-        not_overlapping = []
-        for i in range(0, len(rois) - 1):
-            this_roi = rois[i]
-            next_roi = rois[i+1]
+    def nonmaxima_suppression(cls, rois: List[BoundingBox], threshold=0.3):
+        """Suppress all bounding boxes when they overlap, and they're the smaller of the two boxes.
 
-            # Calculate overlap
-            overlap = calculate_overlap(this_roi, next_roi, expand_y=int(char_size / 2))
+        :param rois:
+        :return:
+        """
+        keep_list = []
+        queue = rois
 
-            dx_of_this = overlap / (this_roi['xmax'] - this_roi['xmin']) * (this_roi['ymax'] - this_roi['ymin'])
-            dy_of_this = overlap / (next_roi['xmax'] - next_roi['xmin']) * (next_roi['ymax'] - next_roi['ymin'])
-            if dx_of_this > 0.5 or dy_of_this > 0.5:
-                pass
+        while len(queue) > 0:
+            this_item = queue[0]
+            queue_end = queue[1:]
+            intersect_set = BoundingBox.intersect_set(this_item, queue_end, threshold)
+            overlap_list_idx = numpy.where(intersect_set)[0]
+            remainder_list_idx = numpy.where(~intersect_set)[0]
+
+            # If there are any matches by intersection...
+            if len(overlap_list_idx) > 0:
+
+                overlap_list = []
+                for i in overlap_list_idx:
+                    overlap_list.append(queue_end[i])
+
+                # Keep the largest intersecting BoundingBox
+                keep = BoundingBox.get_max_area_bbox(this_item, overlap_list)
+
+                # Put the largest back into the remaining queue
+                remainder_list = []
+                for i in remainder_list_idx:
+                    remainder_list.append(queue_end[i])
+                remainder_list.append(keep)
+
+                # Reset the queue
+                queue = remainder_list
+
+            # If there are no matches, we report it as a distinct chunk
             else:
-                not_overlapping.append(this_roi)
+                keep_list.append(this_item)
+                queue = queue_end
 
-def calculate_overlap(object_a, object_b, expand_x=0, expand_y=0):
-    overlap = 0
-    dx = min(object_a['xmax'] + expand_x, object_b['xmax'] + expand_x) - max(object_a['xmin'] - expand_x, object_b['xmin'] - expand_x)
-    dy = min(object_a['ymax'] + expand_y, object_b['ymax'] + expand_y) - max(object_a['ymin'] - expand_y, object_b['ymin'] - expand_y)
-    if (dx >= 0) and (dy >= 0):
-        overlap = dx * dy
-    return overlap
+        return keep_list
 
-def get_rows(chunk, char_size):
-    """Function to help distinguish unique rows"""
-    step_size = int(char_size)
-    rois = chunk['rois']
-    rows = []
-    for y in range(int(chunk['ymin']), int(chunk['ymax']), step_size):
-        this_row = []
-        new_roi_list = []
-        for roi in rois:
-            if roi['ymin'] - step_size <= y < roi['ymax'] + step_size:
-                this_row.append(roi)
-            else:
-                new_roi_list.append(roi)
-        rois = new_roi_list
-        this_row = sorted(this_row, key=lambda x: x['xmin'])
-        if len(this_row):
-            rows.append(this_row)
-    return rows

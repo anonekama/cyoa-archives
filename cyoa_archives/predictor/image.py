@@ -66,5 +66,10 @@ class CyoaImage:
         return rois
 
     def get_ocr_text(self):
-        text = KerasOCR.read_rois(self.rois)
-        return text
+        KerasOCR.set_image_dim(self.width, self.height, self.cv)
+        KerasOCR.read_rois(self.rois)
+        # for i, chunk in enumerate(text):
+          #  logger.info(f"Chunk: {chunk['ymin']} {chunk['ymax']} {chunk['xmin']} {chunk['xmax']}")
+            # cv = self.cv[chunk['ymin']:chunk['ymax'], chunk['xmin']:chunk['xmax']]
+            # cv2.imwrite(f'chunk_{i}.jpg', cv)
+        # return text

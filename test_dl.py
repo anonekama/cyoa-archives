@@ -34,9 +34,9 @@ def main(config):
     tempdir = pathlib.Path('temp/')
     if tempdir.exists():
         logger.info(f'Deleting directory: {tempdir.resolve()}')
-        shutil.rmtree(tempdir.resolve())
+        # shutil.rmtree(tempdir.resolve())
 
-    subprocess.run(['gallery-dl', 'https://imgur.com/gallery/QLfAhNT', '-d', 'temp/'], universal_newlines=True)
+    # subprocess.run(['gallery-dl', 'https://imgur.com/gallery/QLfAhNT', '-d', 'temp/'], universal_newlines=True)
     # subprocess.run(['gallery-dl', 'https://www.reddit.com/gallery/12kylsi', '-d', 'temp/'], universal_newlines=True)
     # subprocess.run(['gallery-dl', 'https://imgchest.com/p/9249jkz27nk', '-d', 'temp/'], universal_newlines=True)
 
@@ -50,6 +50,7 @@ def main(config):
     seen_tags = {}
     rois = []
     for i, image_fn in enumerate(imagepaths):
+        image_fn = pathlib.Path('temp/imgur/QLfAhNT - Super CYOA/imgur_QLfAhNT_001_a85tsaH.jpg')
         print(image_fn)
 
         CyoaImage.load_config(config.get('predictor'))
