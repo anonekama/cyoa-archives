@@ -6,9 +6,6 @@ from typing import Optional, Dict, List, Any
 import cv2
 import numpy as np
 
-from .roi import CyoaROI
-from .ocr import KerasOCR
-
 logger = logging.getLogger(__name__)
 
 class CyoaImage:
@@ -29,15 +26,37 @@ class CyoaImage:
         self.cv = cv2.imread(str(file_path.resolve()))
         self.height = self.cv.shape[0]
         self.width = self.cv.shape[1]
-        self.resize_image()
-        self.rois = self.generate_rois()
+        # self.resize_image()
+        # self.rois = self.generate_rois()
 
         # 3. Feed ROIs to OCR
-        self.get_ocr_text()
+        # self.get_ocr_text()
 
     @classmethod
     def load_config(cls, config_object: Dict[str, Any]) -> None:
         cls.CONFIG = config_object
+
+    def propose_rois(self):
+        """Apply horizontal and vertical pass sectioning until minimum threshold is reached."""
+        # We apply directional sectioning based on the aspect ratio of the image
+        pass
+
+    @classmethod
+    def chunk_image(cls, img, is_horizontal=True) -> List:
+        # Check if dimensions of image are within thresholds
+        HEIGHT, WIDTH, CHANNELS = img.shape
+        if HEIGHT < 100 or WIDTH < 100:
+            return []
+
+        # Apply preprocessing transformations on the image
+        KERNAL_SIZE = 7
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (KERNAL_SIZE, KERNAL_SIZE), 0)
+
+        # Apply Otsu's automatic thresholding
+        (T, thresh) = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+
+        pass
 
     def resize_image(self, width: Optional[int] = None, do_resize_wide: Optional[bool] = False) -> None:
         """Resize input image to a uniform size comparable for all CYOAs in a project."""
@@ -51,6 +70,7 @@ class CyoaImage:
                 self.width = self.cv.shape[1]
         return None
 
+    """
     def generate_rois(self, size: Optional[int] = None) -> List[CyoaROI]:
         input_size = size if size else self.CONFIG.get('input_size')
         sliding_step = int(input_size * 3 / 4)
@@ -73,3 +93,4 @@ class CyoaImage:
             # cv = self.cv[chunk['ymin']:chunk['ymax'], chunk['xmin']:chunk['xmax']]
             # cv2.imwrite(f'chunk_{i}.jpg', cv)
         # return text
+    """
