@@ -1,4 +1,5 @@
 import csv
+import math
 import logging
 import pathlib
 from typing import Optional, Dict, List, Any
@@ -122,56 +123,81 @@ class CyoaImage:
             chunks_d2 = chunk_d1.generate_subchunks(min_size, line_thickness, axis=0)
             for chunk_d2 in chunks_d2:
                 if chunk_d2.width > min_image_size and chunk_d2.height > min_image_size:
-                    chunks_d3 = chunk_d2.generate_subchunks(min_size, line_thickness, axis=1)
-                    for chunk_d3 in chunks_d3:
-                        if chunk_d3.width > min_image_size and chunk_d3.height > min_image_size:
-                            all_chunks.append(chunk_d3)
+                    all_chunks.append(chunk_d2)
+                    #chunks_d3 = chunk_d2.generate_subchunks(min_size, line_thickness, axis=1)
+                    #for chunk_d3 in chunks_d3:
+                    #    if chunk_d3.width > min_image_size and chunk_d3.height > min_image_size:
+                    #        all_chunks.append(chunk_d3)
 
         # Finally, we subtract text bboxes from image bboxes
         text_excluded_chunks = []
         if text_bboxes:
             for chunk in all_chunks:
                 has_no_text = True
+                text_bbox_union_list = []
                 for bbox in text_bboxes:
+                    # We merge all the text boxes that overlap with the chunk
                     if calc_intersect(chunk.x, chunk.xmax, chunk.y, chunk.ymax,
                                       bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax):
                         has_no_text = False
-                        north_slice_delta = chunk.ymax - bbox.ymax
-                        east_slice_delta = chunk.xmax - bbox.xmax
-                        south_slice_delta = bbox.ymin - chunk.y
-                        west_slice_delta = bbox.xmin - chunk.x
-                        if north_slice_delta >= east_slice_delta and north_slice_delta >= south_slice_delta and north_slice_delta >= west_slice_delta:
-                            min_delta = bbox.ymax - chunk.y
-                            chunk.cv = chunk.cv[min_delta:chunk.height, 0:chunk.width]
-                            chunk.y = bbox.ymax
-                            chunk.height = chunk.ymax - chunk.y
-                        elif east_slice_delta >= north_slice_delta and east_slice_delta >= south_slice_delta and east_slice_delta >= west_slice_delta:
-                            min_delta = bbox.xmax - chunk.x
-                            chunk.cv = chunk.cv[0:chunk.height, min_delta:chunk.width]
-                            chunk.x = bbox.xmax
-                            chunk.width = chunk.xmax - chunk.x
-                        elif south_slice_delta >= north_slice_delta and south_slice_delta >= east_slice_delta and south_slice_delta >= west_slice_delta:
-                            max_delta = bbox.ymin - chunk.y
-                            chunk.cv = chunk.cv[0:max_delta, 0:chunk.width]
-                            chunk.ymax = bbox.ymin
-                            chunk.height = chunk.ymax - chunk.y
-                        elif west_slice_delta >= north_slice_delta and west_slice_delta >= east_slice_delta and west_slice_delta >= west_slice_delta:
-                            max_delta = bbox.xmin - chunk.x
-                            chunk.cv = chunk.cv[0:chunk.height, 0:max_delta]
-                            chunk.xmax = bbox.xmin
-                            chunk.width = chunk.xmax - chunk.x
-                        if chunk.height > min_image_size and chunk.width > min_image_size:
-                            text_excluded_chunks.append(chunk)
+                        text_bbox_union_list.append(bbox)
+
                 if has_no_text:
                     text_excluded_chunks.append(chunk)
+
+                else:
+                    text_bbox_union = {
+                        'xmin': math.inf,
+                        'xmax': 0,
+                        'ymin': math.inf,
+                        'ymax': 0
+                    }
+                    for bbox in text_bbox_union_list:
+                        text_bbox_union['xmin'] = bbox.xmin if bbox.xmin < text_bbox_union['xmin'] else text_bbox_union['xmin']
+                        text_bbox_union['xmax'] = bbox.xmax if bbox.xmax > text_bbox_union['xmax'] else text_bbox_union['xmax']
+                        text_bbox_union['ymin'] = bbox.ymin if bbox.ymin < text_bbox_union['ymin'] else text_bbox_union['ymin']
+                        text_bbox_union['ymax'] = bbox.ymax if bbox.ymax > text_bbox_union['ymax'] else text_bbox_union['ymax']
+
+                    # Now address merged text bbox
+                    north_slice_delta = chunk.ymax - text_bbox_union['ymax']
+                    east_slice_delta = chunk.xmax - text_bbox_union['xmax']
+                    south_slice_delta = text_bbox_union['ymin'] - chunk.y
+                    west_slice_delta = text_bbox_union['xmin'] - chunk.x
+                    if north_slice_delta >= east_slice_delta and north_slice_delta >= south_slice_delta and north_slice_delta >= west_slice_delta:
+                        min_delta = text_bbox_union['ymax'] - chunk.y
+                        chunk.cv = chunk.cv[min_delta:chunk.height, 0:chunk.width]
+                        chunk.y = text_bbox_union['ymax']
+                        chunk.height = chunk.ymax - chunk.y
+                    elif east_slice_delta >= north_slice_delta and east_slice_delta >= south_slice_delta and east_slice_delta >= west_slice_delta:
+                        min_delta = text_bbox_union['xmax'] - chunk.x
+                        chunk.cv = chunk.cv[0:chunk.height, min_delta:chunk.width]
+                        chunk.x = text_bbox_union['xmax']
+                        chunk.width = chunk.xmax - chunk.x
+                    elif south_slice_delta >= north_slice_delta and south_slice_delta >= east_slice_delta and south_slice_delta >= west_slice_delta:
+                        max_delta = text_bbox_union['ymin'] - chunk.y
+                        chunk.cv = chunk.cv[0:max_delta, 0:chunk.width]
+                        chunk.ymax = text_bbox_union['ymin']
+                        chunk.height = chunk.ymax - chunk.y
+                    elif west_slice_delta >= north_slice_delta and west_slice_delta >= east_slice_delta and west_slice_delta >= west_slice_delta:
+                        max_delta = text_bbox_union['xmin'] - chunk.x
+                        chunk.cv = chunk.cv[0:chunk.height, 0:max_delta]
+                        chunk.xmax = text_bbox_union['xmin']
+                        chunk.width = chunk.xmax - chunk.x
+                    if chunk.height > min_image_size and chunk.width > min_image_size:
+                        text_excluded_chunks.append(chunk)
         else:
             text_excluded_chunks = all_chunks
 
         # Finally, we remove chunks with low color complexity, as this is more likely to be background
+        high_diversity = []
+        for i, chunk in enumerate(text_excluded_chunks):
+            diversity = chunk.get_color_diversity()
+            # cv2.imwrite(f'chunk_{i}_{diversity}.jpg', chunk.cv)
+            if diversity > 10000:
+                high_diversity.append(chunk)
 
-        return text_excluded_chunks
 
-
+        return high_diversity
 
 
 

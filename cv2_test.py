@@ -23,11 +23,12 @@ def main():
     logger = logging.getLogger(__name__)
 
     #image_fn = pathlib.Path('test.png')
-    image_fn = pathlib.Path('test0.jpg')
+    # image_fn = pathlib.Path('test0.jpg')
     # image_fn = pathlib.Path('test2.jpeg')
     # image_fn = pathlib.Path('test3.jpeg')
     # image_fn = pathlib.Path('test7.jpeg')
     # image_fn = pathlib.Path('test8.png')
+    image_fn = pathlib.Path('test11.png')
 
     cyoa_image = CyoaImage(image_fn)
 
@@ -40,7 +41,7 @@ def main():
     chunks = cyoa_image.get_img_bboxes(text_bboxes=bboxes)
     for i, chunk in enumerate(chunks):
         logger.debug(f'Chunk: {chunk.x} {chunk.y} {chunk.width} {chunk.height}')
-        # cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
+        cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
 
         start_point = (chunk.x, chunk.y)
         end_point = (chunk.xmax, chunk.ymax)

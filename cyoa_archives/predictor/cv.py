@@ -71,7 +71,8 @@ class CvChunk:
         logger.debug(f'Total Rows: {self.height} - AllBlack: {len(black_rows)} - AllWhite: {len(white_rows)}')
 
         # Get boundary proposals
-        boundary_proposals = self.get_boundaries(all_rows, line_thickness, axis=axis)
+        # boundary_proposals = self.get_boundaries(all_rows, line_thickness, axis=axis)
+        boundary_proposals = self.get_boundaries_hierarchal(all_rows, min_size, line_thickness, axis=axis)
 
         # If boundary boxes are provided, then remove overlapping boundary proposals
         approved_proposals = []
@@ -146,10 +147,60 @@ class CvChunk:
 
         return boundaries
 
+    def get_boundaries_hierarchal(self, sorted_index_list, min_size: float, line_thickness: float, axis: int = 1):
+        """In this algorithm, we chunk UNTIL the minimum size is reached."""
+        # First we add all continuous 1-pixel boundaries to a list
+        continuous_row_list = []
+        continuous_row = []
+        last_item = -1
+        for i in sorted_index_list:
+            # If rows were adjacent
+            if abs(i - last_item) <= 1:
+                continuous_row.append(i)
+                if i == len(sorted_index_list):
+                    # Handle last row
+                    continuous_row_list.append(continuous_row)
+                    continuous_row = []
+            else:
+                if len(continuous_row) > 0:
+                    continuous_row_list.append(continuous_row)
+                    continuous_row = []
+            last_item = i
+
+        # Next, we remove rows that do not meet the line_thickness threshold
+        thick_boundaries_list = []
+        for row in continuous_row_list:
+            if len(row) > line_thickness:
+                thick_boundaries_list.append(row)
+
+        # Next, we sort the rows by length and add boundaries until the min_size is reached
+        img_size = self.height if axis == 1 else self.width
+        final_boundaries = [0, img_size]
+        sorted_boundaries = sorted(thick_boundaries_list, key=lambda x: len(x), reverse=True)
+        for row in sorted_boundaries:
+            i = int(np.average(row))
+            query_list = final_boundaries.copy()
+            query_list.append(i)
+            if check_boundary_proposals(sorted(query_list), min_size=min_size):
+                # This proposal is okay, so we can attempt another boundary addition
+                final_boundaries.append(i)
+            else:
+                # Query did not pass; break the loop and return the final boundary
+                break
+
+        final_boundaries = sorted(final_boundaries)
+        return final_boundaries
+
+
     def is_valid(self):
         if self.width > 0 and self.height > 0:
             return True
         return False
+
+    def get_color_diversity(self):
+        b, g, r = cv2.split(self.cv)
+        shiftet_im = b + 1000 * (g + 1) + 1000 * 1000 * (r + 1)
+        return len(np.unique(shiftet_im))
 
 
 def reduce_boundary_proposals(sorted_proposal_list, min_size: float):
