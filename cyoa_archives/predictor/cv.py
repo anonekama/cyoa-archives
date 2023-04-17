@@ -73,7 +73,7 @@ class CvChunk:
             bbox_mask = np.zeros(img_size, dtype=bool)
             for bbox in bboxes:
                 start = bbox.ymin if axis == 1 else bbox.xmin
-                end = bbox.ymax if axis == 1 else bbox.ymax
+                end = bbox.ymax if axis == 1 else bbox.xmax
                 bbox_mask[start:end] = True
 
             # Remove all proposals that occur in the mask

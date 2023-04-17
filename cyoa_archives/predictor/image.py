@@ -86,7 +86,7 @@ class CyoaImage:
         # Perform row chunks first
         # We are looking for greedy chunking, small minimums
         row_min_size = self.width * 0.02  # 600 px minimum height per section
-        line_thickness = self.width * 0.003  # 0.3% of the image width
+        line_thickness = self.width * 0.002  # 0.3% of the image width
         margin = self.width * 0.025
         row_chunks = main_image.generate_subchunks(row_min_size, line_thickness, axis=1, margin=margin, bboxes=self.bboxes)
 
@@ -95,7 +95,7 @@ class CyoaImage:
         all_chunks = []
         for chunk in row_chunks:
             col_min_size = self.width / max_cols
-            col_chunks = chunk.generate_subchunks(col_min_size, line_thickness, axis=0)
+            col_chunks = chunk.generate_subchunks(col_min_size, line_thickness, axis=0, bboxes=self.bboxes)
             all_chunks.extend(col_chunks)
         return all_chunks
 

@@ -23,14 +23,14 @@ def main():
     logger = logging.getLogger(__name__)
 
     #image_fn = pathlib.Path('test.png')
-    image_fn = pathlib.Path('test0.jpg')
+    image_fn = pathlib.Path('test8.png')
 
     cyoa_image = CyoaImage(image_fn)
 
     bboxes = cyoa_image.get_text_bboxes()
     logger.info(f'Found {len(bboxes)} boxes.')
 
-    chunks = cyoa_image.chunk_image(6)
+    chunks = cyoa_image.chunk_image(8)
     for i, chunk in enumerate(chunks):
         cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
 
