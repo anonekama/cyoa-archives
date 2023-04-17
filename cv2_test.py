@@ -26,8 +26,31 @@ def main():
     image_fn = pathlib.Path('test0.jpg')
 
     cyoa_image = CyoaImage(image_fn)
-    text = cyoa_image.get_text()
-    logger.debug(text)
+
+    bboxes = cyoa_image.get_text_bboxes()
+    logger.info(f'Found {len(bboxes)} boxes.')
+
+    chunks = cyoa_image.chunk_image(6)
+    for i, chunk in enumerate(chunks):
+        cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
+
+
+    img = cyoa_image.cv
+    for bbox in bboxes:
+        start_point = (bbox.xmin, bbox.ymin)
+        end_point = (bbox.xmax, bbox.ymax)
+        color = (255, 0, 0)
+        img = cv2.rectangle(img, start_point, end_point, color, 2)
+
+    cv2.imwrite(f'boundingboxes.jpg', img)
+
+
+
+    #cv2.imshow('image', cnts)
+    #cv2.waitKey()
+
+
+    # logger.debug(text)
     # imgs = cyoa_image.get_images()
 
 

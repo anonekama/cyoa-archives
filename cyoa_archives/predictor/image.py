@@ -12,7 +12,8 @@ from .cv import CvChunk
 
 logger = logging.getLogger(__name__)
 
-BBoxTuple = namedtuple('BBoxTuple', ['left', 'top', 'width', 'height'])
+BBoxTuple = namedtuple('BBoxTuple', ['xmin', 'xmax', 'ymin', 'ymax'])
+
 
 class CyoaImage:
     """Represents a CYOA image; loaded from disk."""
@@ -25,28 +26,79 @@ class CyoaImage:
         # Check if file exists
 
         self.file_path = file_path
-        self.original_cv = cv2.imread(str(file_path.resolve()))
-        self.original_height = self.original_cv.shape[0]
-        self.original_width = self.original_cv.shape[1]
-        self.cv = None
-        self.height = None
-        self.width = None
-        self.chunks = None
-        self.scale = None
+        self.cv = cv2.imread(str(file_path.resolve()))
+        self.height = self.cv.shape[0]
+        self.width = self.cv.shape[1]
+        self.bboxes = None
 
         logger.debug(f'File path: {file_path.resolve()}')
-        logger.debug(f'Image Dimensions: {self.original_height} x {self.original_width}')
+        logger.debug(f'Image Dimensions: {self.height} x {self.width}')
 
         # Resize and preprocess image
-        self.resize_image(width=1200)
-        self.cv = self.preprocess_image(self.cv, kernel_size=7)
+        # self.resize_image(width=1200)
+        # self.cv = self.preprocess_image(self.cv, kernel_size=7)
 
         # Make section chunks
-        self.make_section_chunks()
+        # self.make_section_chunks()
 
     @classmethod
     def load_config(cls, config_object: Dict[str, Any]) -> None:
         cls.CONFIG = config_object
+
+    def get_text_bboxes(self):
+        # Run tesseract on the whole image
+        # We want bounding boxes to guide segmentation later
+
+        # First we transform image for tesseract
+        scale = 2
+        resize = cv2.resize(self.cv, (self.width * scale, self.height * scale), interpolation=cv2.INTER_AREA)
+        blur = cv2.medianBlur(resize, 3)
+
+        # Run tesseract
+        logger.info(f'Starting tesseract...')
+        d = pytesseract.image_to_data(blur, output_type=pytesseract.Output.DICT)
+        logger.info(f'Finished tesseract. Found {len(d["level"])} words.')
+
+        # We are interested in level 2 boundaries
+        # But some level 2 boundaries are empty, so make sure to exclude those
+        bboxes = []
+        buffer = None
+        for i in range(len(d['level'])):
+            level = d['level'][i]
+            text = d['text'][i]
+            if level == 2:
+                buffer = BBoxTuple(
+                    xmin=int(d['left'][i] / scale),
+                    xmax=int((d['left'][i] + d['width'][i]) / scale),
+                    ymin=int(d['top'][i] / scale),
+                    ymax=int((d['top'][i] + d['height'][i]) / scale)
+                )
+            if buffer is not None and len(text.strip()):
+                bboxes.append(buffer)
+                buffer = None
+        self.bboxes = bboxes
+        return bboxes
+
+
+    def chunk_image(self, max_cols: int):
+        main_image = CvChunk(self.cv, x=0, y=0)
+
+        # Perform row chunks first
+        # We are looking for greedy chunking, small minimums
+        row_min_size = self.width * 0.02  # 600 px minimum height per section
+        line_thickness = self.width * 0.003  # 0.3% of the image width
+        margin = self.width * 0.025
+        row_chunks = main_image.generate_subchunks(row_min_size, line_thickness, axis=1, margin=margin, bboxes=self.bboxes)
+
+        # Next, perform column chunks for each row chunk
+        # We do not include text bboxes for column chunks because I find that ocr is inaccurate
+        all_chunks = []
+        for chunk in row_chunks:
+            col_min_size = self.width / max_cols
+            col_chunks = chunk.generate_subchunks(col_min_size, line_thickness, axis=0)
+            all_chunks.extend(col_chunks)
+        return all_chunks
+
 
     def get_text(self):
         # We perform tesseract ocr on section chunks, after restoring to the original size
@@ -99,14 +151,6 @@ class CyoaImage:
         line_thickness = 4  # 0.3% of the image width
         margin = 30  # 2.5% of the image width on the borders
         self.chunks = main_image.generate_subchunks(min_size, line_thickness, axis=1, margin=margin)
-
-    @classmethod
-    def chunk_image(cls, img, is_horizontal=True) -> List:
-        # Check if dimensions of image are within thresholds
-        HEIGHT, WIDTH, CHANNELS = img.shape
-        if HEIGHT < 100 or WIDTH < 100:
-            return []
-
 
 
     def resize_image(self, width) -> None:

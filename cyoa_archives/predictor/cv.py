@@ -30,7 +30,8 @@ class CvChunk:
         self.text = None
         self.text_boxes = None
 
-    def generate_subchunks(self, min_size: int, line_thickness: int, axis: int = 1, margin: int = 0) -> List:
+    def generate_subchunks(self, min_size: float, line_thickness: float, axis: int = 1,
+                           margin: int = 0, bboxes: List = None) -> List:
         """Divides a chunk into smaller chunks."""
 
         # If axis is 1, we make row chunks (horizontal lines)
@@ -53,6 +54,7 @@ class CvChunk:
             logger.debug(f'Image without margins: {threshold_image.shape[0]} {threshold_image.shape[1]}')
 
         # Apply Otsu's automatic thresholding
+        threshold_image = cv2.cvtColor(threshold_image, cv2.COLOR_BGR2GRAY)
         (T, thresh) = cv2.threshold(threshold_image, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
         thresh_inv = 255 - thresh
 
@@ -64,6 +66,20 @@ class CvChunk:
 
         # Get boundary proposals
         boundary_proposals = self.get_boundaries(all_rows, line_thickness, axis=axis)
+
+        # If boundary boxes are provided, then remove overlapping boundary proposals
+        if bboxes:
+            # Flatten bboxes into a mask
+            bbox_mask = np.zeros(img_size, dtype=bool)
+            for bbox in bboxes:
+                start = bbox.ymin if axis == 1 else bbox.xmin
+                end = bbox.ymax if axis == 1 else bbox.ymax
+                bbox_mask[start:end] = True
+
+            # Remove all proposals that occur in the mask
+            for i in boundary_proposals:
+                if bbox_mask[i]:
+                    boundary_proposals.remove(i)
 
         # Reduce boundaries
         boundaries = reduce_boundary_proposals(boundary_proposals, min_size)
@@ -79,12 +95,11 @@ class CvChunk:
                 y=chunk.start if axis == 1 else self.y,
             )
             chunk_list.append(new_chunk)
-            cv2.imwrite(f'chunk_{i}.jpg', new_cv)
 
         return chunk_list
 
 
-    def get_boundaries(self, sorted_index_list, line_thickness: int, axis: int = 1):
+    def get_boundaries(self, sorted_index_list, line_thickness: float, axis: int = 1):
         """We assume that index_list is sorted"""
         # The start of an image is always a boundary
         boundaries = [0]
@@ -115,12 +130,12 @@ class CvChunk:
 
         # The end of an image is always a boundary
         img_size = self.height if axis == 1 else self.width
-        boundaries.append(img_size)
+        boundaries.append(img_size - 1)
 
         return boundaries
 
 
-def reduce_boundary_proposals(sorted_proposal_list, min_size: int):
+def reduce_boundary_proposals(sorted_proposal_list, min_size: float):
     # Recursively reduce proposals until it passes the check
     # There should always be at least 2 items on the proposal list (start-end)
     current_proposals = sorted_proposal_list.copy()
@@ -169,7 +184,7 @@ def get_subchunks(sorted_proposal_list):
     return subchunks
 
 
-def check_boundary_proposals(sorted_proposal_list, min_size: int):
+def check_boundary_proposals(sorted_proposal_list, min_size: float):
     """Check if all boundary proposals pass the min_size threshold."""
     # We iterate through length-1 because last element has no next_element
     for i in range(len(sorted_proposal_list) - 1):
