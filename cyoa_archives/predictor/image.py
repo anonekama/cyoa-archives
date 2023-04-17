@@ -9,6 +9,7 @@ import numpy as np
 import pytesseract
 
 from .cv import CvChunk
+from ..util.functions import calc_intersect
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,6 @@ class CyoaImage:
         self.cv = cv2.imread(str(file_path.resolve()))
         self.height = self.cv.shape[0]
         self.width = self.cv.shape[1]
-        self.bboxes = None
 
         logger.debug(f'File path: {file_path.resolve()}')
         logger.debug(f'Image Dimensions: {self.height} x {self.width}')
@@ -46,12 +46,18 @@ class CyoaImage:
         cls.CONFIG = config_object
 
     def get_text_bboxes(self):
+        """Get preliminary bounding boxes for text content to guide segmentation.
+
+        We start on the whole image, but some images are very large, so we split the image into smaller sections using
+        a conservative row-chunking parameter.
+        """
         # Run tesseract on the whole image
         # We want bounding boxes to guide segmentation later
 
-        # First we transform image for tesseract
-        scale = 2
-        resize = cv2.resize(self.cv, (self.width * scale, self.height * scale), interpolation=cv2.INTER_AREA)
+        # First we transform image for tesseract because it performs better with larger images
+        # Tesseract's max dimension size is around 30000
+        scale = 2 if self.height * 2 < 30000 else 30000 / self.height
+        resize = cv2.resize(self.cv, (int(self.width * scale), int(self.height * scale)), interpolation=cv2.INTER_AREA)
         blur = cv2.medianBlur(resize, 3)
 
         # Run tesseract
@@ -76,28 +82,97 @@ class CyoaImage:
             if buffer is not None and len(text.strip()):
                 bboxes.append(buffer)
                 buffer = None
-        self.bboxes = bboxes
         return bboxes
 
 
-    def chunk_image(self, max_cols: int):
+    def chunk_image(self, max_cols: int, bboxes: List):
+        """Divides image into chunks without splitting text"""
         main_image = CvChunk(self.cv, x=0, y=0)
 
         # Perform row chunks first
         # We are looking for greedy chunking, small minimums
-        row_min_size = self.width * 0.02  # 600 px minimum height per section
-        line_thickness = self.width * 0.002  # 0.3% of the image width
+        row_min_size = self.width * 0.02
+        line_thickness = self.width * 0.002
         margin = self.width * 0.025
-        row_chunks = main_image.generate_subchunks(row_min_size, line_thickness, axis=1, margin=margin, bboxes=self.bboxes)
+        row_chunks = main_image.generate_subchunks(row_min_size, line_thickness, axis=1, bboxes=bboxes, margin=margin)
 
         # Next, perform column chunks for each row chunk
         # We do not include text bboxes for column chunks because I find that ocr is inaccurate
         all_chunks = []
         for chunk in row_chunks:
             col_min_size = self.width / max_cols
-            col_chunks = chunk.generate_subchunks(col_min_size, line_thickness, axis=0, bboxes=self.bboxes)
+            col_chunks = chunk.generate_subchunks(col_min_size, line_thickness, bboxes=bboxes, axis=0)
             all_chunks.extend(col_chunks)
         return all_chunks
+
+    def get_img_bboxes(self, text_bboxes: List = None):
+        """Aggressively chunk image. Then subtract text bboxes from the results."""
+        main_image = CvChunk(self.cv, x=0, y=0)
+        min_size = 10
+        line_thickness = 2
+        min_image_size = self.width / 8
+        margin = self.width * 0.025
+
+        # First we obtain row chunks
+        row_chunks = main_image.generate_subchunks(min_size, line_thickness, axis=1, margin=margin)
+
+        # Then for each row_chunk, we chunk several times
+        all_chunks = []
+        for chunk_d1 in row_chunks:
+            chunks_d2 = chunk_d1.generate_subchunks(min_size, line_thickness, axis=0)
+            for chunk_d2 in chunks_d2:
+                if chunk_d2.width > min_image_size and chunk_d2.height > min_image_size:
+                    chunks_d3 = chunk_d2.generate_subchunks(min_size, line_thickness, axis=1)
+                    for chunk_d3 in chunks_d3:
+                        if chunk_d3.width > min_image_size and chunk_d3.height > min_image_size:
+                            all_chunks.append(chunk_d3)
+
+        # Finally, we subtract text bboxes from image bboxes
+        text_excluded_chunks = []
+        if text_bboxes:
+            for chunk in all_chunks:
+                has_no_text = True
+                for bbox in text_bboxes:
+                    if calc_intersect(chunk.x, chunk.xmax, chunk.y, chunk.ymax,
+                                      bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax):
+                        has_no_text = False
+                        north_slice_delta = chunk.ymax - bbox.ymax
+                        east_slice_delta = chunk.xmax - bbox.xmax
+                        south_slice_delta = bbox.ymin - chunk.y
+                        west_slice_delta = bbox.xmin - chunk.x
+                        if north_slice_delta >= east_slice_delta and north_slice_delta >= south_slice_delta and north_slice_delta >= west_slice_delta:
+                            min_delta = bbox.ymax - chunk.y
+                            chunk.cv = chunk.cv[min_delta:chunk.height, 0:chunk.width]
+                            chunk.y = bbox.ymax
+                            chunk.height = chunk.ymax - chunk.y
+                        elif east_slice_delta >= north_slice_delta and east_slice_delta >= south_slice_delta and east_slice_delta >= west_slice_delta:
+                            min_delta = bbox.xmax - chunk.x
+                            chunk.cv = chunk.cv[0:chunk.height, min_delta:chunk.width]
+                            chunk.x = bbox.xmax
+                            chunk.width = chunk.xmax - chunk.x
+                        elif south_slice_delta >= north_slice_delta and south_slice_delta >= east_slice_delta and south_slice_delta >= west_slice_delta:
+                            max_delta = bbox.ymin - chunk.y
+                            chunk.cv = chunk.cv[0:max_delta, 0:chunk.width]
+                            chunk.ymax = bbox.ymin
+                            chunk.height = chunk.ymax - chunk.y
+                        elif west_slice_delta >= north_slice_delta and west_slice_delta >= east_slice_delta and west_slice_delta >= west_slice_delta:
+                            max_delta = bbox.xmin - chunk.x
+                            chunk.cv = chunk.cv[0:chunk.height, 0:max_delta]
+                            chunk.xmax = bbox.xmin
+                            chunk.width = chunk.xmax - chunk.x
+                        if chunk.height > min_image_size and chunk.width > min_image_size:
+                            text_excluded_chunks.append(chunk)
+                if has_no_text:
+                    text_excluded_chunks.append(chunk)
+        else:
+            text_excluded_chunks = all_chunks
+
+        # Finally, we remove chunks with low color complexity, as this is more likely to be background
+
+        return text_excluded_chunks
+
+
+
 
 
     def get_text(self):

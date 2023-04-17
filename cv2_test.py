@@ -23,26 +23,40 @@ def main():
     logger = logging.getLogger(__name__)
 
     #image_fn = pathlib.Path('test.png')
-    image_fn = pathlib.Path('test8.png')
+    image_fn = pathlib.Path('test0.jpg')
+    # image_fn = pathlib.Path('test2.jpeg')
+    # image_fn = pathlib.Path('test3.jpeg')
+    # image_fn = pathlib.Path('test7.jpeg')
+    # image_fn = pathlib.Path('test8.png')
 
     cyoa_image = CyoaImage(image_fn)
 
     bboxes = cyoa_image.get_text_bboxes()
     logger.info(f'Found {len(bboxes)} boxes.')
 
-    chunks = cyoa_image.chunk_image(8)
-    for i, chunk in enumerate(chunks):
-        cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
-
-
     img = cyoa_image.cv
+
+    # chunks = cyoa_image.chunk_image(8, bboxes)
+    chunks = cyoa_image.get_img_bboxes(text_bboxes=bboxes)
+    for i, chunk in enumerate(chunks):
+        logger.debug(f'Chunk: {chunk.x} {chunk.y} {chunk.width} {chunk.height}')
+        # cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
+
+        start_point = (chunk.x, chunk.y)
+        end_point = (chunk.xmax, chunk.ymax)
+        color = (255, 255, 0)
+        img = cv2.rectangle(img, start_point, end_point, color, 2)
+
+
+
     for bbox in bboxes:
         start_point = (bbox.xmin, bbox.ymin)
         end_point = (bbox.xmax, bbox.ymax)
         color = (255, 0, 0)
         img = cv2.rectangle(img, start_point, end_point, color, 2)
 
-    cv2.imwrite(f'boundingboxes.jpg', img)
+
+    cv2.imwrite(f'{image_fn.stem}_boundingboxes.jpg', img)
 
 
 

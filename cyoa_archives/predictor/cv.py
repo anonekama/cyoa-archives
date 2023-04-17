@@ -6,6 +6,8 @@ from typing import List
 import cv2
 import numpy as np
 
+from ..util.functions import calc_intersect
+
 logger = logging.getLogger(__name__)
 
 ChunkTuple = namedtuple('ChunkTuple', ['start', 'end', 'delta'])
@@ -27,12 +29,16 @@ class CvChunk:
         self.y = y
         self.height = cv.shape[0]
         self.width = cv.shape[1]
+        self.xmax = x + cv.shape[1]
+        self.ymax = y + cv.shape[0]
         self.text = None
         self.text_boxes = None
 
-    def generate_subchunks(self, min_size: float, line_thickness: float, axis: int = 1,
-                           margin: int = 0, bboxes: List = None) -> List:
+    def generate_subchunks(self, min_size: float, line_thickness: float, bboxes: List = None, axis: int = 1,
+                           margin: int = 0) -> List:
         """Divides a chunk into smaller chunks."""
+
+        logger.debug('Starting to generate subchunk...')
 
         # If axis is 1, we make row chunks (horizontal lines)
         img_size = self.height if axis == 1 else self.width
@@ -68,21 +74,26 @@ class CvChunk:
         boundary_proposals = self.get_boundaries(all_rows, line_thickness, axis=axis)
 
         # If boundary boxes are provided, then remove overlapping boundary proposals
+        approved_proposals = []
         if bboxes:
-            # Flatten bboxes into a mask
-            bbox_mask = np.zeros(img_size, dtype=bool)
-            for bbox in bboxes:
-                start = bbox.ymin if axis == 1 else bbox.xmin
-                end = bbox.ymax if axis == 1 else bbox.xmax
-                bbox_mask[start:end] = True
-
-            # Remove all proposals that occur in the mask
             for i in boundary_proposals:
-                if bbox_mask[i]:
-                    boundary_proposals.remove(i)
+                good_boundary = True
+                for bbox in bboxes:
+                    intersection = calc_intersect(bbox.xmin, bbox.xmax, bbox.ymin, bbox.ymax, self.x, self.xmax, self.y, self.ymax)
+                    logger.debug(f'{bbox.xmin} {bbox.xmax} {bbox.ymin} {bbox.ymax} | {self.x} {self.xmax} {self.y} {self.ymax} | {intersection}')
+                    if intersection:
+                        start = bbox.ymin if axis == 1 else bbox.xmin
+                        end = bbox.ymax if axis == 1 else bbox.xmax
+                        if start < i < end:
+                            good_boundary = False
+                            logger.debug(f'Bad boundary; {start} < {i} < {end}')
+                if good_boundary:
+                    approved_proposals.append(i)
+        else:
+            approved_proposals = boundary_proposals
 
         # Reduce boundaries
-        boundaries = reduce_boundary_proposals(boundary_proposals, min_size)
+        boundaries = reduce_boundary_proposals(approved_proposals, min_size)
         chunks = get_subchunks(boundaries)
 
         logger.debug(f'Boundaries: {chunks}')
@@ -91,10 +102,11 @@ class CvChunk:
             new_cv = self.cv[chunk.start:chunk.end, 0:self.width] if axis == 1 else self.cv[0:self.height, chunk.start:chunk.end]
             new_chunk = CvChunk(
                 cv=new_cv,
-                x=self.x if axis == 1 else chunk.start,
-                y=chunk.start if axis == 1 else self.y,
+                x=self.x if axis == 1 else self.x + chunk.start,
+                y=self.y + chunk.start if axis == 1 else self.y,
             )
-            chunk_list.append(new_chunk)
+            if new_chunk.is_valid():
+                chunk_list.append(new_chunk)
 
         return chunk_list
 
@@ -134,8 +146,14 @@ class CvChunk:
 
         return boundaries
 
+    def is_valid(self):
+        if self.width > 0 and self.height > 0:
+            return True
+        return False
+
 
 def reduce_boundary_proposals(sorted_proposal_list, min_size: float):
+    # TODO: Implement a reduction algorithm that reduces based on width
     # Recursively reduce proposals until it passes the check
     # There should always be at least 2 items on the proposal list (start-end)
     current_proposals = sorted_proposal_list.copy()
