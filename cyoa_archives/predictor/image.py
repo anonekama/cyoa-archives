@@ -2,6 +2,7 @@ import csv
 import logging
 import pathlib
 from typing import Optional, Dict, List, Any
+from collections import namedtuple
 
 import cv2
 import numpy as np
@@ -11,6 +12,8 @@ from .cv import CvChunk
 
 logger = logging.getLogger(__name__)
 
+BBoxTuple = namedtuple('BBoxTuple', ['left', 'top', 'width', 'height'])
+
 class CyoaImage:
     """Represents a CYOA image; loaded from disk."""
 
@@ -18,12 +21,6 @@ class CyoaImage:
     CONFIG = None
 
     def __init__(self, file_path: pathlib.Path):
-
-        # Assert config has essential values
-        #if 'max_width' not in self.CONFIG:
-        #    raise ValueError(f'Please configure (max_width) attribute for image processing.')
-        #if 'input_size' not in self.CONFIG:
-        #    raise ValueError(f'Please configure (input_size) attribute for image processing.')
 
         # Check if file exists
 
@@ -47,15 +44,13 @@ class CyoaImage:
         # Make section chunks
         self.make_section_chunks()
 
-
-
     @classmethod
     def load_config(cls, config_object: Dict[str, Any]) -> None:
         cls.CONFIG = config_object
 
     def get_text(self):
         # We perform tesseract ocr on section chunks, after restoring to the original size
-        text = ""
+        all_text = []
         for section in self.chunks:
             ystart = int(section.y / self.scale)
             yend = int((section.y + section.height) / self.scale)
@@ -68,13 +63,32 @@ class CyoaImage:
             roi = self.preprocess_image(roi, kernel_size=7)
 
             # Run tesseract
+            bboxes = []
+            text = []
             data = pytesseract.image_to_data(roi)
             reader = csv.reader(data.splitlines(), delimiter='\t')
+            next(reader)
+            last_block = 0
             for row in reader:
-                print(','.join(row))
-            break
-        #
-
+                conf = float(row[10])
+                block = int(row[2])
+                if block != last_block:
+                    # This is a bounding box for a whole block fo text
+                    bbox = BBoxTuple(
+                        left=int(row[6]),
+                        top=int(row[7]),
+                        width=int(row[8]),
+                        height=int(row[9])
+                    )
+                    bboxes.append(bbox)
+                    text.append('\n')
+                if conf > 0:
+                    text.append(row[11])
+                last_block = block
+            section.text = ' '.join(text)
+            section.bboxes = bboxes
+            all_text.extend(text)
+        return ' '.join(all_text)
 
     def make_section_chunks(self):
         """We make chunks out of large sections for OCR."""

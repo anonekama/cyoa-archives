@@ -27,6 +27,8 @@ class CvChunk:
         self.y = y
         self.height = cv.shape[0]
         self.width = cv.shape[1]
+        self.text = None
+        self.text_boxes = None
 
     def generate_subchunks(self, min_size: int, line_thickness: int, axis: int = 1, margin: int = 0) -> List:
         """Divides a chunk into smaller chunks."""

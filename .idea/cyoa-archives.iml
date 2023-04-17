@@ -4,7 +4,7 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/cyoa_env" />
     </content>
-    <orderEntry type="jdk" jdkName="$USER_HOME$/.pyenv/versions/3.7.16/bin/python3.7" jdkType="Python SDK" />
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

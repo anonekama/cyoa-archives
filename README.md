@@ -18,6 +18,7 @@ Via PIP
 * strsimpy
 * opencv-contrib-pythong
 * gallery-dl
+* pytesseract
 
 Via github
 
