@@ -27,19 +27,31 @@ class CvChunk:
         self.y = y
         self.height = cv.shape[0]
         self.width = cv.shape[1]
-        self.colors = len(np.unique(cv))
 
-    def generate_subchunks(self, min_size: int, line_thickness: int, axis: int = 1) -> List:
+    def generate_subchunks(self, min_size: int, line_thickness: int, axis: int = 1, margin: int = 0) -> List:
         """Divides a chunk into smaller chunks."""
+
         # If axis is 1, we make row chunks (horizontal lines)
         img_size = self.height if axis == 1 else self.width
+        img_thickness = self.width if axis == 1 else self.height
 
         # If the Chunk is already too small return an empty list
         if img_size <= min_size:
             return []
 
+        # If margin is set, we modify the image
+        threshold_image = self.cv
+        if margin:
+            new_start = int(margin)
+            new_end = int(img_thickness - margin)
+            if axis == 1:
+                threshold_image = threshold_image[0:img_size, new_start:new_end]
+            else:
+                threshold_image = threshold_image[new_start:new_end, 0:img_size]
+            logger.debug(f'Image without margins: {threshold_image.shape[0]} {threshold_image.shape[1]}')
+
         # Apply Otsu's automatic thresholding
-        (T, thresh) = cv2.threshold(self.cv, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        (T, thresh) = cv2.threshold(threshold_image, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
         thresh_inv = 255 - thresh
 
         # Find continuous rows
@@ -51,18 +63,23 @@ class CvChunk:
         # Get boundary proposals
         boundary_proposals = self.get_boundaries(all_rows, line_thickness, axis=axis)
 
-        # Check if there are too many chunks of smalll size
-        # Maybe store the median chunk size
-        # If there are too many small chunks, this function should be aborted
-
         # Reduce boundaries
         boundaries = reduce_boundary_proposals(boundary_proposals, min_size)
         chunks = get_subchunks(boundaries)
 
         logger.debug(f'Boundaries: {chunks}')
+        chunk_list = []
         for i, chunk in enumerate(chunks):
-            chunk_cv = self.cv[chunk.start:chunk.end, 0:self.width]
-            cv2.imwrite(f'chunk_{i}.jpg', chunk_cv)
+            new_cv = self.cv[chunk.start:chunk.end, 0:self.width] if axis == 1 else self.cv[0:self.height, chunk.start:chunk.end]
+            new_chunk = CvChunk(
+                cv=new_cv,
+                x=self.x if axis == 1 else chunk.start,
+                y=chunk.start if axis == 1 else self.y,
+            )
+            chunk_list.append(new_chunk)
+            cv2.imwrite(f'chunk_{i}.jpg', new_cv)
+
+        return chunk_list
 
 
     def get_boundaries(self, sorted_index_list, line_thickness: int, axis: int = 1):
