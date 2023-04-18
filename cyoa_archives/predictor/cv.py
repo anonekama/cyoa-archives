@@ -17,14 +17,12 @@ ChunkTuple = namedtuple('ChunkTuple', ['start', 'end', 'delta'])
 
 class CvChunk:
 
-    def __init__(self, cv, x: int, y: int):
+    def __init__(self, cv: np.ndarray, x: int, y: int):
         """Construct a Chunk object.
 
-        We assume that the image passed in has preprocessed (e.g. grayscale and blurred)
-
-        :param cv:
-        :param x:
-        :param y:
+        :param cv: A slice from a loaded CV2 image.
+        :param x: The absolute xmin coordinate (left).
+        :param y: The absolute ymin coordinate (top).
         """
         self.cv = cv
         self.xmin = x
@@ -46,9 +44,17 @@ class CvChunk:
             bboxes: List = None,
             greedy: bool = False
     ) -> List:
-        """Divides a chunk into smaller chunks.
+        """Divides a Chunk into smaller Chunks.
 
         Should Chunk should return itself if there are no further subchunks.
+
+        :param min_size:
+        :param line_thickness:
+        :param axis:
+        :param margin:
+        :param bboxes:
+        :param greedy:
+        :return:
         """
 
         logger.debug('Starting to generate subchunk...')
@@ -228,7 +234,7 @@ class CvChunk:
         # Store data
         self.tesseract = data
 
-    def get_text(self, scale: int, blur_kernel: int = 3, minimum_conf: float = 0, recalculate: bool = False) -> str:
+    def get_text(self, scale: int, blur_kernel: int = 3, minimum_conf: float = 50, recalculate: bool = False) -> str:
         """Get the text in this chunk as a string.
 
         :param scale: Factor to scale image by before performing tesseract.
@@ -254,10 +260,10 @@ class CvChunk:
             text = self.tesseract['text'][i]
             if block != last_block:
                 # Newline to indicate paragraph break
-                text.append('\n')
+                text_list.append('\n')
             if conf > minimum_conf:
                 text_list.append(text)
-
+            last_block = block
         # Set the text in this chunk
         self.text = " ".join(text_list).strip()
         return self.text
@@ -318,7 +324,7 @@ class CvChunk:
                 # logger.debug(f'Found level {level}.')
                 if buffer is not None:
                     # logger.debug(f'Conf average: {np.average(conf_list)}.')
-                    if np.average(conf_list) > minimum_conf:
+                    if len(conf_list) and np.average(conf_list) > minimum_conf:
                         bboxes.append(buffer)
                 conf_list = []
 
@@ -337,23 +343,28 @@ class CvChunk:
             if i == len(self.tesseract['level']):
                 # Flush at the end of the loop
                 if buffer is not None and len(text.strip()):
-                    if np.average(conf_list) > minimum_conf:
+                    if len(conf_list) and np.average(conf_list) > minimum_conf:
                         bboxes.append(buffer)
 
         logger.debug(f'Found {len(bboxes)} results.')
         self.text_bboxes = bboxes
         return bboxes
 
+    def get_text_conf(self):
+        conf = np.array(self.tesseract['conf'])
+        true_conf = conf[conf != -1]
+        return np.average(true_conf)
+
     def get_image_bboxes(
             self,
             min_size: int = 10,
             line_thickness: int = 2,
             min_image_size: int = 100,
-            color_threshold: int = 10000,
+            color_threshold: int = 1000,
             n_recursions: int = 3,
             margin: float = 0,
             axis: int = 1,
-            text_bboxes: Optional[List[BBoxTuple]] = None
+            text_bboxes: List[BBoxTuple] = None
     ):
         """Get bounding boxes for images based on recursive chunking.
 
@@ -371,7 +382,7 @@ class CvChunk:
         # Recursive function
         chunk_list = []
         if n_recursions > 1:
-            chunks = self.cv.generate_subchunks(min_size, line_thickness, axis=axis, margin=margin)
+            chunks = self.generate_subchunks(min_size, line_thickness, axis=axis, margin=margin)
             for chunk in chunks:
                 # We drop chunks entirely if they are too small
                 # For large chunks, we attempt to re-chunk again
@@ -393,7 +404,7 @@ class CvChunk:
 
         # Escape condition for recursion (n_recursions=0)
         else:
-            chunks = self.cv.generate_subchunks(min_size, line_thickness, axis=axis, margin=margin)
+            chunks = self.generate_subchunks(min_size, line_thickness, axis=axis, margin=margin)
             for chunk in chunks:
                 if chunk.width > min_image_size and chunk.height > min_image_size:
 
@@ -402,6 +413,8 @@ class CvChunk:
                         cropped_chunk = subtract_bboxes_from_chunk(chunk, text_bboxes)
                         if cropped_chunk.width > min_image_size and cropped_chunk.height > min_image_size:
                             chunk_list.append(cropped_chunk)
+                    else:
+                        chunk_list.append(chunk)
 
             # Finally, we remove chunks with low color complexity, as this is more likely to be background
             high_diversity_list = []
