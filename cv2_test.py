@@ -15,20 +15,23 @@ import pandas as pd
 import yaml
 
 from cyoa_archives.predictor.image import CyoaImage
-from cyoa_archives.predictor.cv import CvChunk
+from cyoa_archives.predictor.deepdanbooru import DeepDanbooru
 
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
+    dd = DeepDanbooru('deepdanbooru-v3-20211112-sgd-e28')
+
     #image_fn = pathlib.Path('test.png')
-    #image_fn = pathlib.Path('test0.jpg')
-    # image_fn = pathlib.Path('test2.jpeg')
+    #image_fn = pathlib.Path('test1.jpeg')
+    #image_fn = pathlib.Path('test2.jpeg')
     #image_fn = pathlib.Path('test3.jpeg')
+    image_fn = pathlib.Path('test4.jpg')
     #image_fn = pathlib.Path('test7.jpeg')
     #image_fn = pathlib.Path('test8.png')
-    image_fn = pathlib.Path('test11.png')
+    # image_fn = pathlib.Path('test11.png')
 
     cyoa_image = CyoaImage(image_fn)
 
@@ -53,7 +56,7 @@ def main():
     img = cyoa_image.cv
     for i, chunk in enumerate(section_chunks):
         # logger.debug(f'Chunk: {chunk.xmin} {chunk.ymin} {chunk.width} {chunk.height}')
-        cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
+        #cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
 
         start_point = (chunk.xmin, chunk.ymin)
         end_point = (chunk.xmax, chunk.ymax)
@@ -96,6 +99,21 @@ def main():
 
     logger.debug(text)
 
+    # Run deepdanbooru
+    result_dict = {}
+    result_dict['keys'] = dd.tags
+    for i, ibox in enumerate(img_bbox_list):
+        img_crop = cyoa_image.cv[ibox.ymin:ibox.ymax, ibox.xmin:ibox.xmax]
+        img_dict = dd.evaluate(img_crop)
+
+        iname = f'img_{i}'
+        result_dict[iname] = img_dict.values()
+
+        cv2.imwrite(f'img_{i}.jpg', img_crop)
+
+    data = pd.DataFrame(result_dict)
+    data.to_csv(f'{image_fn.stem}.csv')
+
     ############ DEBUG PRINT SECTION CHUNKS
     for i, chunk in enumerate(row_chunks):
         start_point = (chunk.xmin, chunk.ymin)
@@ -122,38 +140,9 @@ def main():
         img = cv2.rectangle(img, start_point, end_point, color, 5)
 
     cv2.imwrite(f'{image_fn.stem}_boundingboxes.jpg', img)
+
     ############ DEBUG PRINT SECTION CHUNKS
 
-    # 3. Chunk aggressively for images, ignoring text boundaries
-
-
-
-
-    """
-    for bbox in bboxes:
-        start_point = (bbox.xmin, bbox.ymin)
-        end_point = (bbox.xmax, bbox.ymax)
-        color = (255, 0, 0)
-        img = cv2.rectangle(img, start_point, end_point, color, 2)
-    """
-
-
-
-
-    #cv2.imshow('image', cnts)
-    #cv2.waitKey()
-
-
-    # logger.debug(text)
-    # imgs = cyoa_image.get_images()
-
-
-    # Apply loose chunking for ocr
-
-    # Then apply greedy chunking for (rows, then columns) for
-
-    #cv2.imshow("image", normalized)
-    #cv2.waitKey()
 
 
 if __name__ == "__main__":

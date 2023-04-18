@@ -223,7 +223,7 @@ class CvChunk:
         # First we transform image for tesseract because it performs better with larger images
         # Tesseract's max dimension size is around 30000
         scale = scale if self.height * scale < 30000 else 30000 / self.height
-        resize = cv2.resize(self.cv, (int(self.width * scale), int(self.height * scale)), interpolation=cv2.INTER_AREA)
+        resize = cv2.resize(self.cv, (int(self.width * scale), int(self.height * scale)), interpolation=cv2.INTER_CUBIC)
         blur = cv2.medianBlur(resize, blur_kernel)
 
         # Run tesseract

@@ -49,6 +49,8 @@ cd io
 
 python setup.py -q bdist_wheel
 
+python -m pip install --no-deps dist/tensorflow_io-0.32.0-cp38-cp38-macosx_11_0_arm64.whl
+
 https://medium.com/dive-into-ml-ai/installing-tensorflow-natively-on-mac-m1-in-2022-1357e9b7a201
 
 ## Usage
