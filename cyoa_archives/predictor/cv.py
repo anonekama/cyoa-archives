@@ -227,9 +227,9 @@ class CvChunk:
         blur = cv2.medianBlur(resize, blur_kernel)
 
         # Run tesseract
-        logger.info(f'Starting tesseract on chunk: {self.xmin}-{self.ymin} ({self.width}x{self.height})...')
+        logger.debug(f'Starting tesseract on chunk: {self.xmin}-{self.ymin} ({self.width}x{self.height})...')
         data = pytesseract.image_to_data(blur, output_type=pytesseract.Output.DICT)
-        logger.info(f'Finished tesseract. Found {len(data["level"])} words.')
+        logger.debug(f'Finished tesseract. Found {len(data["level"])} words.')
 
         # Store data
         self.tesseract = data

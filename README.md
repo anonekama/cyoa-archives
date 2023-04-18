@@ -19,6 +19,7 @@ Via PIP
 * opencv-contrib-pythong
 * gallery-dl
 * pytesseract
+* ImageHash
 
 Via github
 

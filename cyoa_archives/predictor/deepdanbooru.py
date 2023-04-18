@@ -5,7 +5,7 @@ import deepdanbooru as dd
 import tensorflow as tf
 
 PROJECT_PATH = 'deepdanbooru-v3-20211112-sgd-e28'
-DD_THRESHOLD = 0.3
+DD_THRESHOLD = 0.5
 DD_REPORT_THRESHOLD = 0.03
 
 logger = logging.getLogger(__name__)
@@ -44,13 +44,16 @@ class DeepDanbooru:
         image = image / 255.0
 
         # Run the model
-        logger.info(f'Starting DeepDanbooru...')
+        logger.debug(f'Starting DeepDanbooru...')
         image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
         y = self.model.predict(image)[0]
 
         # Return results
         result_dict = OrderedDict()
         for i, tag in enumerate(self.tags):
-            result_dict[tag] = y[i]
+            if y[i] > 0.3:
+                result_dict[tag] = y[i]
+            else:
+                result_dict[tag] = 0
 
         return result_dict

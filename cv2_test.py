@@ -15,134 +15,72 @@ import pandas as pd
 import yaml
 
 from cyoa_archives.predictor.image import CyoaImage
-from cyoa_archives.predictor.deepdanbooru import DeepDanbooru
 
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
 
-    dd = DeepDanbooru('deepdanbooru-v3-20211112-sgd-e28')
 
     #image_fn = pathlib.Path('test.png')
     #image_fn = pathlib.Path('test1.jpeg')
     #image_fn = pathlib.Path('test2.jpeg')
     #image_fn = pathlib.Path('test3.jpeg')
-    image_fn = pathlib.Path('test4.jpg')
+    #image_fn = pathlib.Path('test4.jpg')
     #image_fn = pathlib.Path('test7.jpeg')
     #image_fn = pathlib.Path('test8.png')
     # image_fn = pathlib.Path('test11.png')
 
-    cyoa_image = CyoaImage(image_fn)
+    image_fns = [
+        pathlib.Path('data/test1.jpeg'),
+        pathlib.Path('data/test2.jpeg'),
+        pathlib.Path('data/test3.jpeg'),
+        pathlib.Path('data/test4.jpg'),
+        pathlib.Path('data/test5.png'),
+        pathlib.Path('data/test6.png'),
+        pathlib.Path('data/test7.jpeg'),
+        pathlib.Path('data/test8.png'),
+        pathlib.Path('data/test10.png'),
+        pathlib.Path('data/test11.png'),
+        pathlib.Path('data/test12.jpg'),
+        pathlib.Path('data/test13.png'),
+        pathlib.Path('data/test14.jpg'),
+        pathlib.Path('data/test15.jpg'),
+        pathlib.Path('data/test16.png'),
+        pathlib.Path('data/test17.jpg'),
+        pathlib.Path('data/test18.png'),
+        pathlib.Path('data/test19.jpeg'),
+        pathlib.Path('data/test20.jpeg')
+    ]
 
-    # 1. Divide CYOA into large row sections
-    min_size = cyoa_image.width * 0.10  # Start with a 1:10 aspect ratio minimum
-    line_thickness = cyoa_image.width * 0.004  # For a 1200px image, this is 5px
-    margin = 0.025  # For a 1200px image, this is a 30px margin
-    section_chunks = cyoa_image.as_chunk().generate_subchunks(
-        min_size=min_size,
-        line_thickness=line_thickness,
-        margin=margin
-    )
+    d = {}
+    for image_fn in image_fns:
+        cyoa_image = CyoaImage(image_fn)
+        #cyoa_image.make_chunks()
+        #text = cyoa_image.get_text()
+        filename = image_fn.stem
+        result = cyoa_image.run_deepdanbooru_random(1)
+        d[filename] = result
 
-    # 2. Get bbox coordinates for text blocks.
-    prelim_bbox_list = []
-    for chunk in section_chunks:
-        text_bboxes = chunk.get_text_bboxes(level=2, scale=2, minimum_conf=30)  # Text blocks
-        prelim_bbox_list.extend(text_bboxes)
+    dataframe = pd.DataFrame(d)
+    dataframe.to_csv(f'all_data.csv')
 
-    ############ DEBUG PRINT SECTION CHUNKS
-    #
-    img = cyoa_image.cv
-    for i, chunk in enumerate(section_chunks):
-        # logger.debug(f'Chunk: {chunk.xmin} {chunk.ymin} {chunk.width} {chunk.height}')
-        #cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
+    """
+    csv_list = []
+    for image_fn in image_fns:
+        stem = image_fn.stem
+        csv_list.append(f'img_{stem}.csv')
 
-        start_point = (chunk.xmin, chunk.ymin)
-        end_point = (chunk.xmax, chunk.ymax)
-        color = (255, 0, 0)
-        img = cv2.rectangle(img, start_point, end_point, color, 5)
 
-    #
-    ############ DEBUG PRINT SECTION CHUNKS
-
-    # 3. Perform more aggressive horizontal chunks and use this for ocr
-    row_chunks = []
-    for chunk in section_chunks:
-        chunks = chunk.generate_subchunks(
-            min_size=25,
-            line_thickness=10,
-            margin=0.025,
-            bboxes=prelim_bbox_list,
-            greedy=False
-        )
-        row_chunks.extend(chunks)
-
-    text = ""
-    bbox_list = []
-    img_bbox_list = []
-    for chunk in row_chunks:
-        row_text = chunk.get_text(scale=2, minimum_conf=70)
-        text = text + row_text
-        row_bboxes = chunk.get_text_bboxes(scale=2, level=4, minimum_conf=70)  # Line blocks
-        bbox_list.extend(row_bboxes)
-
-        # Next also generate image bboxes
-        img_bboxes = chunk.get_image_bboxes(
-            min_size=10,
-            line_thickness=2,
-            min_image_size=100,
-            color_threshold=10000,
-            n_recursions=4
-        )
-        img_bbox_list.extend(img_bboxes)
-
-    logger.debug(text)
-
-    # Run deepdanbooru
-    result_dict = {}
-    result_dict['keys'] = dd.tags
-    for i, ibox in enumerate(img_bbox_list):
-        img_crop = cyoa_image.cv[ibox.ymin:ibox.ymax, ibox.xmin:ibox.xmax]
-        img_dict = dd.evaluate(img_crop)
-
-        iname = f'img_{i}'
-        result_dict[iname] = img_dict.values()
-
-        cv2.imwrite(f'img_{i}.jpg', img_crop)
-
-    data = pd.DataFrame(result_dict)
-    data.to_csv(f'{image_fn.stem}.csv')
-
-    ############ DEBUG PRINT SECTION CHUNKS
-    for i, chunk in enumerate(row_chunks):
-        start_point = (chunk.xmin, chunk.ymin)
-        end_point = (chunk.xmax, chunk.ymax)
-        color = (255, 255, 255)
-        img = cv2.rectangle(img, start_point, end_point, color, 3)
-
-    for i, bbox in enumerate(prelim_bbox_list):
-        start_point = (bbox.xmin, bbox.ymin)
-        end_point = (bbox.xmax, bbox.ymax)
-        color = (255, 255, 0)
-        img = cv2.rectangle(img, start_point, end_point, color, -1)
-
-    for i, bbox in enumerate(bbox_list):
-        start_point = (bbox.xmin, bbox.ymin)
-        end_point = (bbox.xmax, bbox.ymax)
-        color = (0, 0, 0)
-        img = cv2.rectangle(img, start_point, end_point, color, 3)
-
-    for i, bbox in enumerate(img_bbox_list):
-        start_point = (bbox.xmin, bbox.ymin)
-        end_point = (bbox.xmax, bbox.ymax)
-        color = (0, 0, 225)
-        img = cv2.rectangle(img, start_point, end_point, color, 5)
-
-    cv2.imwrite(f'{image_fn.stem}_boundingboxes.jpg', img)
-
-    ############ DEBUG PRINT SECTION CHUNKS
-
+    data = pd.read_csv('img_test1.csv', index_col=False)
+    print(data)
+    data = data.iloc[:, 1:-1]
+    for csv_file in csv_list[1:]:
+        df = pd.read_csv(csv_file, index_col=False)
+        df = df.iloc[:, 1:-1]
+        data = pd.merge(data, df, left_on='keys', right_on='keys')
+    data.to_csv(f'all_data.csv')
+    """
 
 
 if __name__ == "__main__":
