@@ -23,41 +23,88 @@ def main():
     logger = logging.getLogger(__name__)
 
     #image_fn = pathlib.Path('test.png')
-    # image_fn = pathlib.Path('test0.jpg')
+    image_fn = pathlib.Path('test0.jpg')
     # image_fn = pathlib.Path('test2.jpeg')
     # image_fn = pathlib.Path('test3.jpeg')
     # image_fn = pathlib.Path('test7.jpeg')
     # image_fn = pathlib.Path('test8.png')
-    image_fn = pathlib.Path('test11.png')
+    #image_fn = pathlib.Path('test11.png')
 
     cyoa_image = CyoaImage(image_fn)
 
-    bboxes = cyoa_image.get_text_bboxes()
-    logger.info(f'Found {len(bboxes)} boxes.')
+    # 1. Divide CYOA into large row sections
+    min_size = cyoa_image.width * 0.25  # Start with a 1:4 aspect ratio minimum
+    line_thickness = cyoa_image.width * 0.004  # For a 1200px image, this is 5px
+    margin = 0.025  # For a 1200px image, this is a 30px margin
+    section_chunks = cyoa_image.as_chunk().generate_subchunks(
+        min_size=min_size,
+        line_thickness=line_thickness,
+        margin=margin
+    )
 
+    # 2. Get bbox coordinates for paragraphs.
+    bbox_list = []
+    for chunk in section_chunks:
+        text_bboxes = chunk.get_text_bboxes(level=3, scale=2, minimum_conf=30)
+        bbox_list.extend(text_bboxes)
+
+    ############ DEBUG PRINT SECTION CHUNKS
     img = cyoa_image.cv
-
-    # chunks = cyoa_image.chunk_image(8, bboxes)
-    chunks = cyoa_image.get_img_bboxes(text_bboxes=bboxes)
-    for i, chunk in enumerate(chunks):
-        logger.debug(f'Chunk: {chunk.x} {chunk.y} {chunk.width} {chunk.height}')
+    for i, chunk in enumerate(section_chunks):
+        # logger.debug(f'Chunk: {chunk.xmin} {chunk.ymin} {chunk.width} {chunk.height}')
         cv2.imwrite(f'chunk_{i}.jpg', chunk.cv)
 
-        start_point = (chunk.x, chunk.y)
+        start_point = (chunk.xmin, chunk.ymin)
         end_point = (chunk.xmax, chunk.ymax)
+        color = (255, 0, 0)
+        img = cv2.rectangle(img, start_point, end_point, color, 5)
+
+    for i, bbox in enumerate(bbox_list):
+        start_point = (bbox.xmin, bbox.ymin)
+        end_point = (bbox.xmax, bbox.ymax)
         color = (255, 255, 0)
-        img = cv2.rectangle(img, start_point, end_point, color, 2)
+        img = cv2.rectangle(img, start_point, end_point, color, -1)
+
+    ############ DEBUG PRINT SECTION CHUNKS
+
+    # 3. Perform more aggressive horizontal chunks
+    row_chunks = []
+    for chunk in section_chunks:
+        min_size = 10  #
+        line_thickness = 4  # For a 1200px image, this is 5px
+        margin = 0.025  # For a 1200px image, this is a 30px margin
+        chunks = chunk.generate_subchunks(
+            min_size=min_size,
+            line_thickness=line_thickness,
+            margin=margin,
+            bboxes=bbox_list,
+            greedy=False
+        )
+        row_chunks.extend(chunks)
+
+    ############ DEBUG PRINT SECTION CHUNKS
+    for i, chunk in enumerate(row_chunks):
+        start_point = (chunk.xmin, chunk.ymin)
+        end_point = (chunk.xmax, chunk.ymax)
+        color = (255, 255, 255)
+        img = cv2.rectangle(img, start_point, end_point, color, 3)
+
+    cv2.imwrite(f'{image_fn.stem}_boundingboxes.jpg', img)
+    ############ DEBUG PRINT SECTION CHUNKS
+
+    # 3. Chunk aggressively for images, ignoring text boundaries
 
 
 
+
+    """
     for bbox in bboxes:
         start_point = (bbox.xmin, bbox.ymin)
         end_point = (bbox.xmax, bbox.ymax)
         color = (255, 0, 0)
         img = cv2.rectangle(img, start_point, end_point, color, 2)
+    """
 
-
-    cv2.imwrite(f'{image_fn.stem}_boundingboxes.jpg', img)
 
 
 
