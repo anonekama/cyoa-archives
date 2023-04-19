@@ -1,5 +1,6 @@
 from collections import OrderedDict
 import logging
+import math
 
 import deepdanbooru as dd
 import tensorflow as tf
@@ -16,8 +17,10 @@ class DeepDanbooru:
     The default model uses images of 512x512 size.
     """
 
-    def __init__(self, project_path=PROJECT_PATH, tags_path=None):
+    def __init__(self, project_path=PROJECT_PATH, tags_path=None, special_tags=None, threshold=0.5):
         self.model = dd.project.load_model_from_project(project_path, compile_model=False)
+        self.special_tags = special_tags
+        self.threshold = threshold
         if tags_path:
             self.tags = dd.data.load_tags(tags_path)
         else:
@@ -51,9 +54,17 @@ class DeepDanbooru:
         # Return results
         result_dict = OrderedDict()
         for i, tag in enumerate(self.tags):
-            if y[i] > 0.3:
+            if y[i] > self.threshold:
                 result_dict[tag] = y[i]
             else:
                 result_dict[tag] = 0
+
+        # Apply special tags (root sum square)
+        # logger.debug(self.special_tags.items())
+        for tag, tag_list in self.special_tags.items():
+            sum_squares = 0
+            for item in tag_list:
+                sum_squares = sum_squares + result_dict[item] ** 2
+            result_dict[tag] = math.sqrt(sum_squares)
 
         return result_dict

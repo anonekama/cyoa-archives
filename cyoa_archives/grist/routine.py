@@ -68,3 +68,19 @@ def praw_fetch_add_update(config):
         add_json = add_pd.to_json(orient='records', default_handler=str)
         add_object = json.loads(add_json)
         api.add_records('Records', add_object, mock=False, prompt=False)
+
+
+def grist_fetch_deepl(config):
+    # Set up API
+    api = GristAPIWrapper(config.get('grist'))
+
+    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp', 'static_url', 'interactive_url'])
+    deepl_pd = grist_cyoa_pd.loc[grist_cyoa_pd['deepl']]
+    filter_pd = deepl_pd.loc[deepl_pd['deepl_timestamp'] == 0]
+    return filter_pd
+
+def grist_update_item(config, table, item_dict):
+    # Set up API
+    api = GristAPIWrapper(config.get('grist'))
+    api.update_records(table, [item_dict], mock=False, prompt=False)
+    return None

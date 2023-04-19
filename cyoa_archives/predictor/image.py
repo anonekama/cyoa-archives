@@ -15,13 +15,9 @@ logger = logging.getLogger(__name__)
 
 BBoxTuple = namedtuple('BBoxTuple', ['xmin', 'xmax', 'ymin', 'ymax'])
 
-from .deepdanbooru import DeepDanbooru
-
 
 class CyoaImage:
     """Represents a CYOA image; loaded from disk."""
-
-    dd = DeepDanbooru('deepdanbooru-v3-20211112-sgd-e28')
 
     def __init__(self, file_path: pathlib.Path):
 
@@ -83,7 +79,7 @@ class CyoaImage:
             text = text + row_text
         return text
 
-    def run_deepdanbooru(self):
+    def run_deepdanbooru(self, dd):
         bbox_list = []
         img_bbox_list = []
         for chunk in self.chunks:
@@ -105,7 +101,7 @@ class CyoaImage:
         result_dict2 = {}
         for i, ibox in enumerate(img_bbox_list):
             img_crop = self.cv[ibox.ymin:ibox.ymax, ibox.xmin:ibox.xmax]
-            img_dict = self.dd.evaluate(img_crop)
+            img_dict = dd.evaluate(img_crop)
 
             iname = f'img_{i}'
             result_dict[iname] = img_dict
@@ -114,20 +110,20 @@ class CyoaImage:
 
         # Loop through results once more
         tag_average = []
-        for i, tag in enumerate(self.dd.tags):
+        for i, tag in enumerate(dd.tags):
             sum = 0
             for result in result_dict.values():
                 sum = sum + result[tag]
             tag_average.append(sum / len(result_dict))
 
-        result_dict2['keys'] = self.dd.tags
+        result_dict2['keys'] = dd.tags
         result_dict2['avg'] = tag_average
 
         data = pd.DataFrame(result_dict2)
         data = data.sort_values(by=['avg'], ascending=False)
         data.to_csv(f'img_{self.file_path.stem}.csv')
 
-    def run_deepdanbooru_random(self, coverage=1):
+    def run_deepdanbooru_random(self, dd, coverage=1):
         # Resize wide images to a standard width for comparability
         max_width = 1200
         if self.height > self.width > max_width:
@@ -155,8 +151,8 @@ class CyoaImage:
                 random_slice = cyoa_page[randomy:randomy+512, randomx:randomx+512]
 
                 # Run deepdanbooru
-                img_dict = self.dd.evaluate(random_slice)
-                for i, tag in enumerate(self.dd.tags):
+                img_dict = dd.evaluate(random_slice)
+                for tag in img_dict:
                     if tag not in result_dict:
                         result_dict[tag] = [img_dict[tag]]
                     else:

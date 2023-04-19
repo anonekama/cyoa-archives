@@ -1,0 +1,182 @@
+import argparse
+import json
+import logging
+import math
+import numpy as np
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import time
+
+from collections import OrderedDict
+
+from keybert import KeyBERT
+import pandas as pd
+import yaml
+
+from cyoa_archives.grist.routine import grist_fetch_deepl, grist_update_item
+from cyoa_archives.predictor.deepdanbooru import DeepDanbooru
+from cyoa_archives.predictor.image import CyoaImage
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+def main(config, database_folder, temporary_folder):
+    # Get the list of cyoas to download
+    cyoa_list = grist_fetch_deepl(config)
+    logger.debug(cyoa_list)
+
+    # Initialize deepdanbooru
+    predictor_config = config.get('predictor')
+    dd = DeepDanbooru(predictor_config.get('model_path'), special_tags=predictor_config.get('dd_tags'), threshold=predictor_config.get('dd_threshold'))
+    kw_model = KeyBERT(predictor_config.get('keybert_model'))
+
+    # Run loop
+    for index, row in cyoa_list.iterrows():
+        g_id = row['id']
+        uuid = row['uuid']
+        interactive_url = row['interactive_url']
+        cyoa_title = row['official_title']
+        static_url = row['static_url']
+
+        # Empty temporary directory
+        if temporary_folder.exists():
+            logger.info(f'Deleting directory: {temporary_folder.resolve()}')
+            shutil.rmtree(temporary_folder.resolve())
+            os.makedirs(temporary_folder)
+
+        # Download using gallery-dl
+        subprocess.run(['gallery-dl', static_url, '-d', temporary_folder.resolve()], universal_newlines=True)
+
+        # Now run application on all images in the temporary directory
+        image_paths = []
+        for extension in ['*.png', '*.jpg', '*.jpeg']:
+            for image_path in temporary_folder.rglob(extension):
+                image_paths.append(image_path)
+        logger.debug(image_paths)
+
+        # TODO: Consider adding image hash function
+
+        # Run the main processor loop
+        all_text = ''
+        all_data = OrderedDict()
+        total_pixels = 0
+        page_count = 0
+        for i, image_path in enumerate(image_paths):
+            # Run processor
+            logger.info(f'Processing image {i + 1}/{len(image_paths)} in {cyoa_title}...')
+            cyoa_image = CyoaImage(image_path)
+            cyoa_image.make_chunks()
+            this_text = cyoa_image.get_text()
+            this_dd_data = cyoa_image.run_deepdanbooru_random(dd, coverage=predictor_config.get('coverage'))
+            page_count = page_count + 1
+            total_pixels = total_pixels + cyoa_image.area
+
+            # Append data from multiple images
+            all_text = all_text + this_text
+            for tag in this_dd_data:
+                if tag in all_data:
+                    all_data[tag].extend(this_dd_data[tag])
+                else:
+                    all_data[tag] = this_dd_data[tag]
+
+
+        logger.debug(all_text)
+        if len(all_data):
+
+            # keybert
+            kb_output = kw_model.extract_keywords(all_text, keyphrase_ngram_range=(1, 1), stop_words=None, top_n=10)
+            top_keywords = []
+            for keyword in kb_output:
+                word = keyword[0]
+                conf = keyword[1]
+                if conf > predictor_config.get('keybert_threshold'):
+                    top_keywords.append(word)
+            logger.info(f'Keybert output: {top_keywords}')
+
+            # Update record
+            timestamp = time.time()
+            logger.debug(all_data.get('dd_girl'))
+            record = {
+                'id': g_id,
+                'pages': page_count,
+                'pixels': int(math.sqrt(total_pixels)),
+                'n_char': len(all_text),
+                'keybert': ', '.join(top_keywords),
+                'dd_sex': np.average(all_data.get('dd_sex')),
+                'dd_girl': np.average(all_data.get('dd_girl')),
+                'dd_boy': np.average(all_data.get('dd_boy')),
+                'dd_other': np.average(all_data.get('dd_other')),
+                'dd_furry': np.average(all_data.get('dd_furry')),
+                'dd_bdsm': np.average(all_data.get('dd_bdsm')),
+                'dd_3d': np.average(all_data.get('dd_3d')),
+                'deepl_timestamp': timestamp
+            }
+            grist_update_item(config, 'CYOAs', record)
+
+            # Write results to db folder
+            outdir = pathlib.Path.joinpath(database_folder, uuid)
+            if not outdir.exists():
+                os.makedirs(outdir)
+
+            text_file = pathlib.Path.joinpath(outdir, 'text.txt')
+            data_file = pathlib.Path.joinpath(outdir, 'dd.txt')
+            info_file = pathlib.Path.joinpath(outdir, 'info.txt')
+            with open(text_file, 'w') as f:
+                f.write(all_text)
+            with open(data_file, 'w') as f:
+                for tag in all_data:
+                    f.write(f'{tag}\t{np.average(all_data[tag])}\n')
+            with open(info_file, 'w') as f:
+                f.write(f'Pages: {page_count}\n')
+                f.write(f'Pixels: {total_pixels}\n')
+                f.write(f'Coverage: {predictor_config.get("coverage")}\n')
+                f.write(f'Threshold: {predictor_config.get("coverage")}\n')
+                f.write(f'Timestamp: {timestamp}\n')
+        else:
+            logger.info('Predictor found no results for this image.')
+
+        # Delete tempdir
+        if tempdir.exists():
+            logger.info(f'Deleting directory: {tempdir.resolve()}')
+            shutil.rmtree(tempdir.resolve())
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Parse a subreddit for submissions using praw."
+    )
+    parser.add_argument("-c", "--config_file", help="Configuration file to use")
+    parser.add_argument("-d", "--database_folder", help="Folder to use as database")
+    parser.add_argument("-t", "--temporary_folder", help="Folder to use to temporarily keep files")
+
+    # Parse arguments
+    args = parser.parse_args()
+
+    # Load arguments from configuration file if provided
+    if args.config_file:
+        filepath = pathlib.Path(args.config_file)
+        try:
+            with open(filepath) as f:
+                config = yaml.safe_load(f)
+        except OSError:
+            print(f"Could not read file: {filepath}")
+            sys.exit(1)
+
+    # If the database folder does not exist, create it
+    dbdir = pathlib.Path(args.database_folder)
+    if not dbdir.exists():
+        os.makedirs(dbdir)
+
+    # Empty the temporary directory before starting
+    tempdir = pathlib.Path(args.temporary_folder)
+
+    # Pass to main function
+    main(
+        config,
+        dbdir,
+        tempdir
+    )
