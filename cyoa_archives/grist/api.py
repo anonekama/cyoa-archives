@@ -1,8 +1,6 @@
 """Grist API wrapper
 Provides class for interacting with Grist
 """
-__author__ = "anonekama"
-__version__ = 0.2
 
 import logging
 import pandas
@@ -16,7 +14,10 @@ logger = logging.getLogger(__name__)
 
 class GristAPIWrapper:
 
-    def __init__(self, config_object: Dict[str, Any]):
+    def __init__(self, config_object: Dict):
+        # Assert that configuration file is appropriately formatted
+
+
         self.server_url = config_object.get('server_url')
         self.document_id = config_object.get('document_id')
         self.api_key = config_object.get('api_key')

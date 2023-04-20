@@ -59,12 +59,12 @@ class DeepDanbooru:
             else:
                 result_dict[tag] = 0
 
-        # Apply special tags (root sum square)
+        # Apply special tags (get the maximum of all related tags)
         # logger.debug(self.special_tags.items())
         for tag, tag_list in self.special_tags.items():
-            sum_squares = 0
+            value_list = []
             for item in tag_list:
-                sum_squares = sum_squares + result_dict[item] ** 2
-            result_dict[tag] = math.sqrt(sum_squares)
+                value_list.append(result_dict[item])
+            result_dict[tag] = max(value_list)
 
         return result_dict

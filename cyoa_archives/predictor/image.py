@@ -76,7 +76,7 @@ class CyoaImage:
         text = ""
         for chunk in self.chunks:
             row_text = chunk.get_text(scale=2, minimum_conf=70)
-            text = text + row_text
+            text = text + " " + row_text
         return text
 
     def run_deepdanbooru(self, dd):

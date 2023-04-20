@@ -1,6 +1,8 @@
 import json
 import re
 
+from typing import Dict
+
 import pandas as pd
 
 from strsimpy.metric_lcs import MetricLCS
@@ -70,17 +72,43 @@ def praw_fetch_add_update(config):
         api.add_records('Records', add_object, mock=False, prompt=False)
 
 
-def grist_fetch_deepl(config):
+def grist_fetch_deepl(config: Dict) -> pd.DataFrame:
+    """Fetch a list of CYOAs from Grist that have been marked for Deep Learning.
+
+    These are CYOAs marked ('deepl') and lack a ('deepl_timestamp').
+
+    :param config: A configuration file (root) for the application.
+    :return: A pandas dataframe.
+    """
     # Set up API
     api = GristAPIWrapper(config.get('grist'))
 
-    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp', 'static_url', 'interactive_url'])
-    deepl_pd = grist_cyoa_pd.loc[grist_cyoa_pd['deepl']]
+    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=[
+        'id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp', 'static_url', 'interactive_url', 'last_posted'
+    ])
+    deepl_pd = grist_cyoa_pd.loc[grist_cyoa_pd['deepl']].sort_values(by=['last_posted'], ascending=False)
     filter_pd = deepl_pd.loc[deepl_pd['deepl_timestamp'] == 0]
     return filter_pd
 
-def grist_update_item(config, table, item_dict):
+def grist_fetch_keybert(config):
     # Set up API
     api = GristAPIWrapper(config.get('grist'))
-    api.update_records(table, [item_dict], mock=False, prompt=False)
+
+    grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp',
+                                                           'text', 'keybert'])
+    deepl_pd = grist_cyoa_pd.loc[grist_cyoa_pd['deepl']]
+    filter_pd = deepl_pd[~(deepl_pd['text'].isnull() | deepl_pd['text'].eq(''))]
+    no_keybert_pd = filter_pd[filter_pd['keybert'].isnull() | filter_pd['keybert'].eq('')]
+    return no_keybert_pd
+
+def grist_update_item(config, table, item_dict):
+    # Check if item_dict is a singleton or a list
+    if type(item_dict) is list:
+        result = item_dict
+    else:
+        result = [item_dict]
+
+    # Set up API
+    api = GristAPIWrapper(config.get('grist'))
+    api.update_records(table, result, mock=False, prompt=False)
     return None

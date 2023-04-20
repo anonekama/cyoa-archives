@@ -19,8 +19,11 @@ import PIL
 import yaml
 
 from cyoa_archives.predictor.image import CyoaImage
+from cyoa_archives.predictor.deepdanbooru import DeepDanbooru
 
 logger = logging.getLogger(__name__)
+
+dd = DeepDanbooru('deepdanbooru-v3-20211112-sgd-e28', threshold=0.3)
 
 def process_folder_or_file(item_path, data_dir, parent_tag, is_folder=False):
     cyoa_title = item_path.stem
@@ -86,7 +89,7 @@ def process_folder_or_file(item_path, data_dir, parent_tag, is_folder=False):
         cyoa_image = CyoaImage(image_path)
         #cyoa_image.make_chunks()
         #this_text = cyoa_image.get_text()
-        this_dd_data = cyoa_image.run_deepdanbooru_random(2)
+        this_dd_data = cyoa_image.run_deepdanbooru_random(dd, 2)
         page_count = page_count + 1
         total_pixels = total_pixels + cyoa_image.area
 
