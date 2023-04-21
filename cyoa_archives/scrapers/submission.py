@@ -128,9 +128,14 @@ class RedditSubmission:
         urls = re.findall(pattern, str(text))
 
         # Next append the url field and remove duplicate urls
-        urls = list(set(urls))
+        seen_urls = {}
+        final_url_list = []
+        for url in urls:
+            if url not in seen_urls:
+                seen_urls[url] = True
+                final_url_list.append(url)
 
-        return urls
+        return final_url_list
 
     def parse_urls(self) -> List[str]:
         # First, define all bad url substrings
