@@ -12,6 +12,7 @@ __pycache__
 config.yaml
 
 data/
+other/
 venv/
 cyoa_env/
 env_cyoa_archives/
