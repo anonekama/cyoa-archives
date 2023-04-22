@@ -44,10 +44,10 @@ def praw_fetch_add_update(config):
     grist_pd = api.fetch_table_pd('Records', col_names=['id', 'r_id'])
     grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'official_title'])
 
-    for subreddit in ['nsfwcyoa', 'makeyourchoice']:
+    for subreddit in ['nsfwcyoa', 'makeyourchoice', 'InteractiveCYOA']:
 
         # Fetch data from Praw
-        praw_data = praw.scrape(subreddit, limit=100)
+        praw_data = praw.scrape(subreddit, limit=50)
         praw_pd = pd.DataFrame.from_dict(praw_data)
 
         # First update old records
