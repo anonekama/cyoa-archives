@@ -21,6 +21,7 @@ Via PIP
 * pytesseract
 * ImageHash
 * Keybert
+* Selenium (and Chromedriver)
 
 Via github
 
