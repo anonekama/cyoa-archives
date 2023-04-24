@@ -14,6 +14,7 @@ import imagehash
 from cyoa_archives.grist.api import GristAPIWrapper
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 # Parse args
 parser = argparse.ArgumentParser(
@@ -44,70 +45,93 @@ if not dbdir.exists():
 # Set up API
 api = GristAPIWrapper(config.get('grist'))
 grist_pd = api.fetch_table_pd('Records', col_names=[
-        'id', 'cyoa_uuid', 'is_cyoa', 'static_url', 'broken_link', 'image_hashes', 'created_utc', 'cyoa'
+        'id', 'cyoa_uuid', 'is_cyoa', 'static_url', 'interactive_url', 'broken_link', 'image_hashes2', 'created_utc',
+        'cyoa', 'link_flair_text', 'title'
     ])
-cyoa_pd = grist_pd.loc[grist_pd['cyoa'] > 0].sort_values(by=['created_utc'], ascending=False)
+cyoa_pd = grist_pd.loc[grist_pd['is_cyoa'].eq('Yes')].sort_values(by=['created_utc'], ascending=False)
 logger.debug(len(cyoa_pd))
 
 
 result_list = []
+count = 0
 for index, row in cyoa_pd.iterrows():
     g_id = row['id']
     cyoa_uuid = row['cyoa_uuid']
     is_cyoa = row['is_cyoa']
     static_url = row['static_url']
+    interactive_url = row['interactive_url']
     broken_link = row['broken_link']
-    image_hashes = row['image_hashes']
+    image_hashes = row['image_hashes2']
+    flair = row['link_flair_text']
+    title = row['title']
 
-    # Skip irrelevant rows
-    if not static_url or broken_link or image_hashes:
-        continue
+    try:
 
-    # Empty temporary directory
-    if tempdir.exists():
-        logger.info(f'Deleting directory: {tempdir.resolve()}')
-        shutil.rmtree(tempdir.resolve())
-        os.makedirs(tempdir)
+        # Skip irrelevant rows
+        if not static_url or broken_link or image_hashes or interactive_url:
+            continue
 
-    # Download using gallery-dl
-    subprocess.run(['gallery-dl', static_url, '-d', tempdir.resolve()], universal_newlines=True)
-    image_paths = []
-    for extension in ['*.png', '*.jpg', '*.jpeg']:
-        for image_path in tempdir.rglob(extension):
-            image_paths.append(image_path)
-    logger.debug(image_paths)
+        # Skip posts flagged as interactive
+        if flair and 'Interactive' in flair:
+            continue
 
-    # Now run hashing algorithm on all images in the temporary directory
-    hash_list = []
-    for image in image_paths:
+        # Empty temporary directory
+        if tempdir.exists():
+            logger.info(f'Deleting directory: {tempdir.resolve()}')
+            shutil.rmtree(tempdir.resolve())
+            os.makedirs(tempdir)
 
-        # Hash the image (Let's use average hash because it's less tolerant)
-        image_hash = imagehash.average_hash(Image.open(image))
-        image_hash_str = str(image_hash)
-        hash_list.append(image_hash_str)
+        # Download using gallery-dl
+        subprocess.run(['gallery-dl', static_url, '-d', tempdir.resolve(), '--range', '1-100'], universal_newlines=True)
+        image_paths = []
+        for extension in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
+            for image_path in tempdir.rglob(extension):
+                image_paths.append(image_path)
+        logger.debug(image_paths)
 
-        # If it's an imgur image, save it
-        if 'imgur.' in static_url:
-            cyoa_directory = pathlib.Path.joinpath(dbdir, cyoa_uuid)
-            if not cyoa_directory.exists():
-                logger.info(f'Making database folder at: {dbdir.resolve()}')
-                os.makedirs(cyoa_directory)
-            image_path_copy = pathlib.Path.joinpath(dbdir, cyoa_uuid, image_hash_str + image.suffix)
-            shutil.copyfile(image, image_path_copy)
+        # Now run hashing algorithm on all images in the temporary directory
+        hash_list = []
+        for i, image in enumerate(image_paths):
 
-    # Detect no downloads
-    is_broken_link = False
-    if not image_paths:
-        is_broken_link = True
+            # Hash the image (Let's use average hash because it's less tolerant)
+            img = Image.open(image)
+            image_hash = imagehash.average_hash(img)
+            color_hash = imagehash.colorhash(img, binbits=3)
+            image_hash_str = str(image_hash) + '_' + str(color_hash)
+            hash_list.append(image_hash_str)
 
-    # 
-    result_list.append({
-        'id': g_id,
-        'image_hashes': ', '.join(hash_list),
-        'broken_link': is_broken_link
-    })
+            # If it's an imgur image, save it
+            if 'imgur.' in static_url:
+                if cyoa_uuid:
+                    cyoa_directory = pathlib.Path.joinpath(dbdir, cyoa_uuid)
+                else:
+                    cyoa_directory = pathlib.Path.joinpath(dbdir, title.replace('/', '').strip())
+                if not cyoa_directory.exists():
+                    logger.info(f'Making database folder at: {cyoa_directory.resolve()}')
+                    os.makedirs(cyoa_directory)
+                image_path_copy = pathlib.Path.joinpath(cyoa_directory, image.stem + image.suffix)
+                shutil.copyfile(image, image_path_copy)
+
+        # Detect no downloads
+        is_broken_link = False
+        if not image_paths:
+            is_broken_link = True
+
+        # Append results
+        result_list.append({
+            'id': g_id,
+            'image_hashes2': ', '.join(hash_list),
+            'broken_link': is_broken_link
+        })
+
+    except:
+        logger.warning(f'Unable to has image: {static_url}')
 
     time.sleep(3)
+    count = count + 1
+    if count % 25 == 0:
+        api.update_records('Records', result_list, mock=False, prompt=False)
+        hash_list = []
 
 # Update grist
-api.update_records('Records', result_list, mock=False, prompt=True)
+api.update_records('Records', result_list, mock=False, prompt=False)

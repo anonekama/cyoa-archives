@@ -53,7 +53,7 @@ def main(config, database_folder, temporary_folder):
 
         # Now run application on all images in the temporary directory
         image_paths = []
-        for extension in ['*.png', '*.jpg', '*.jpeg']:
+        for extension in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
             for image_path in temporary_folder.rglob(extension):
                 image_paths.append(image_path)
         logger.debug(image_paths)

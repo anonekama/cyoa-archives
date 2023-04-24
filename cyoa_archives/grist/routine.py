@@ -1,15 +1,25 @@
 import json
+import logging
+import os
+import pathlib
 import re
+import shutil
+import subprocess
 
 from typing import Dict
 
+import imagehash
 import pandas as pd
 
+from PIL import Image
 from strsimpy.metric_lcs import MetricLCS
 from strsimpy.ngram import NGram
 
 from cyoa_archives.grist.api import GristAPIWrapper
 from cyoa_archives.scrapers.praw import PrawAPIWrapper
+
+logger = logging.getLogger(__name__)
+
 
 def find_closest_cyoa(title, cyoa_df):
     # Loop through records and find nearest match
@@ -34,6 +44,38 @@ def find_closest_cyoa(title, cyoa_df):
         if (min_st.mlcs < 0.2) and (min_st.fg < 0.2) and (delta > 0.3):
             return int(min_st.cyoa)
     return None
+
+def hash_static_url(static_url, temp_dir):
+    if static_url:
+        # Empty temporary directory
+        tempdir = pathlib.Path(temp_dir)
+        if tempdir.exists():
+            logger.info(f'Deleting directory: {tempdir.resolve()}')
+            shutil.rmtree(tempdir.resolve())
+            os.makedirs(tempdir)
+
+        # Download using gallery-dl
+        subprocess.run(['gallery-dl', static_url, '-d', tempdir.resolve()], universal_newlines=True)
+        image_paths = []
+        for extension in ['*.png', '*.jpg', '*.jpeg']:
+            for image_path in tempdir.rglob(extension):
+                image_paths.append(image_path)
+        logger.debug(image_paths)
+
+        # Now run hashing algorithm on all images in the temporary directory
+        hash_list = []
+        for image in image_paths:
+            # Hash the image (Let's use average hash because it's less tolerant)
+            img = Image.open(image)
+            image_hash = imagehash.average_hash(img)
+            color_hash = imagehash.colorhash(img, binbits=3)
+            image_hash_str = str(image_hash) + '_' + str(color_hash)
+            hash_list.append(image_hash_str)
+
+        return ', '.join(hash_list)
+    else:
+        return ''
+
 
 def praw_fetch_add_update(config):
 
@@ -64,9 +106,12 @@ def praw_fetch_add_update(config):
         # Next add new records
         new_pd = praw_pd.loc[~praw_pd['r_id'].isin(grist_pd['r_id'])]
         new_pd['cyoa'] = new_pd['title'].apply(find_closest_cyoa, cyoa_df=grist_cyoa_pd)
-        add_pd = new_pd[['author', 'created_utc', 'cyoa', 'r_id', 'is_self', 'link_flair_text', 'num_comments',
-                            'permalink', 'removed_by_category', 'score', 'selftext', 'subreddit', 'title',
-                            'total_awards_received', 'upvote_ratio', 'urls', 'static_url', 'interactive_url', 'is_cyoa']]
+        new_pd['image_hashes2'] = new_pd['static_url'].apply(hash_static_url, temp_dir=config.get('project').get('temp_dir'))
+        add_pd = new_pd[[
+            'author', 'created_utc', 'cyoa', 'r_id', 'is_self', 'link_flair_text', 'num_comments', 'permalink',
+            'removed_by_category', 'score', 'selftext', 'subreddit', 'title', 'total_awards_received', 'upvote_ratio',
+            'urls', 'static_url', 'interactive_url', 'is_cyoa', 'image_hashes2'
+        ]]
         add_json = add_pd.to_json(orient='records', default_handler=str)
         add_object = json.loads(add_json)
         api.add_records('Records', add_object, mock=False, prompt=False)
