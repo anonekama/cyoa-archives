@@ -27,10 +27,10 @@ if args.config_file:
         sys.exit(1)
 
 # Set up API
-api = GristAPIWrapper(config.get('grist'))
+api = GristAPIWrapper.from_config(config.get('grist'))
 title_pd = api.fetch_table_pd('CYOAs', col_names=['uuid', 'official_title'])
 grist_pd = api.fetch_table_pd('Records', col_names=[
-        'id', 'cyoa_uuid', 'image_hashes2', 'cyoa', 'title'
+        'id', 'cyoa_uuid', 'image_hashes', 'cyoa', 'title'
     ])
 cyoa_pd = grist_pd.loc[grist_pd['cyoa'] > 0]
 logger.debug(len(cyoa_pd))
@@ -46,7 +46,7 @@ for index, row in cyoa_pd.iterrows():
     g_id = row['id']
     cyoa = row['cyoa']
     cyoa_uuid = row['cyoa_uuid']
-    image_hashes = row['image_hashes2']
+    image_hashes = row['image_hashes']
     title = row['title']
 
     if not image_hashes:

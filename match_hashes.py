@@ -53,9 +53,9 @@ for index, row in allsync_hash_pd.iterrows():
 
 # Now get grist hashes
 # Set up API
-api = GristAPIWrapper(config.get('grist'))
+api = GristAPIWrapper.from_config(config.get('grist'))
 grist_pd = api.fetch_table_pd('Records', col_names=[
-        'id', 'cyoa_uuid', 'image_hashes2', 'cyoa', 'is_cyoa'
+        'id', 'cyoa_uuid', 'image_hashes', 'cyoa', 'is_cyoa'
     ])
 cyoa_pd = api.fetch_table_pd('CYOAs', col_names=[ 'id', 'uuid' ])
 main_pd = grist_pd.loc[grist_pd['is_cyoa'].eq('Yes')]
@@ -74,7 +74,7 @@ for index, row in main_pd.iterrows():
     g_id = row['id']
     cyoa = row['cyoa']
     cyoa_uuid = row['cyoa_uuid']
-    image_hashes = row['image_hashes2']
+    image_hashes = row['image_hashes']
 
     if not cyoa or cyoa == 0:
         continue
@@ -95,7 +95,7 @@ for index, row in main_pd.iterrows():
     g_id = row['id']
     cyoa = row['cyoa']
     cyoa_uuid = row['cyoa_uuid']
-    image_hashes = row['image_hashes2']
+    image_hashes = row['image_hashes']
 
     if cyoa:
         continue

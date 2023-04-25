@@ -1,19 +1,34 @@
+"""Update Grist Script
+
+Scrapes reddit for recent posts and updates the Grist Records table.
+
+Typical usage:
+    python3 update_grist.py -c config.yaml -p [reddit password]
+
+"""
+__version__ = 0.3
+
 import argparse
-import json
 import logging
 import pathlib
 import sys
+from typing import Dict
 
-import pandas as pd
 import yaml
-# from strsimpy.metric_lcs import MetricLCS
-# from strsimpy.ngram import NGram
 
 from cyoa_archives.grist.routine import praw_fetch_add_update
 
-def main(config, password):
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def main(config: Dict, password: str) -> None:
+    """Main method for the script.
+
+    :param config: Dictionary of configuration values.
+    :param password: Reddit password
+    :return:
+    """
 
     # Set up config
     new_config = config
@@ -41,7 +56,7 @@ if __name__ == "__main__":
             with open(filepath) as f:
                 config = yaml.safe_load(f)
         except OSError:
-            print(f"Could not read file: {filepath}")
+            logger.error(f"Could not read file: {filepath}")
             sys.exit(1)
 
     # Pass to main function

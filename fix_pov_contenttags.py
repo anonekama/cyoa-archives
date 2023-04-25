@@ -28,9 +28,9 @@ if args.config_file:
 
 
 # Set up API
-api = GristAPIWrapper(config.get('grist'))
+api = GristAPIWrapper.from_config(config.get('grist'))
 
-backup_api = GristAPIWrapper(config.get('grist'))
+backup_api = GristAPIWrapper.from_config(config.get('grist'))
 backup_api.document_id = 'CENSORED'
 backup_api.api = GristDocAPI(backup_api.document_id, server=backup_api.server_url, api_key=backup_api.api_key)
 

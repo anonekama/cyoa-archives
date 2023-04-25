@@ -25,7 +25,7 @@ def main(config, hashfile):
     print(df)
 
     # Get grist hashes
-    api = GristAPIWrapper(config.get('grist'))
+    api = GristAPIWrapper.from_config(config.get('grist'))
     title_pd = api.fetch_table_pd('CYOAs', col_names=['uuid', 'official_title'])
     grist_pd = api.fetch_table_pd('Records', col_names=[
         'id', 'cyoa_uuid', 'image_hashes2', 'cyoa', 'title'

@@ -1,3 +1,5 @@
+"""Miscellaneous functions for interacting with grist."""
+
 import json
 import logging
 import os
@@ -77,13 +79,23 @@ def hash_static_url(static_url, temp_dir):
         return ''
 
 
-def praw_fetch_add_update(config):
+def praw_fetch_add_update(config: Dict) -> None:
+    """Fetch recent updates from reddit (praw) and update the Grist Records table.
+
+    :param config: A config dictionary object
+    """
+    # Parse configuration file
+    grist_config = config.get('grist')
+    server_url = grist_config.get('server_url')
+    document_id = grist_config.get('document_id')
+    api_key = grist_config.get('api_key')
+    praw_config = config.get('reddit_scraper')
 
     # Set up API
-    api = GristAPIWrapper(config.get('grist'))
+    api = GristAPIWrapper(server_url=server_url, document_id=document_id, api_key=api_key)
     praw = PrawAPIWrapper(config.get('reddit_scraper'))
 
-    grist_pd = api.fetch_table_pd('Records', col_names=['id', 'r_id'])
+    grist_records_pd = api.fetch_table_pd('Records', col_names=['id', 'r_id'])
     grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'official_title'])
 
     for subreddit in ['nsfwcyoa', 'makeyourchoice', 'InteractiveCYOA']:
@@ -95,22 +107,25 @@ def praw_fetch_add_update(config):
         # First update old records
         inner_merge = pd.merge(
             praw_pd[
-                ['r_id', 'score', 'num_comments', 'upvote_ratio', 'total_awards_received', 'parser_timestamp']],
-            grist_pd[['r_id', 'id']],
+                ['r_id', 'score', 'num_comments', 'upvote_ratio', 'total_awards_received', 'parser_timestamp']
+            ],
+            grist_records_pd[['r_id', 'id']],
             on=['r_id']
         )
         update_json = inner_merge.to_json(orient='records', default_handler=str)
         update_object = json.loads(update_json)
         api.update_records('Records', update_object, mock=False, prompt=False)
 
+        # TODO: Match CYOAs by their image hashes
+
         # Next add new records
-        new_pd = praw_pd.loc[~praw_pd['r_id'].isin(grist_pd['r_id'])]
+        new_pd = praw_pd.loc[~praw_pd['r_id'].isin(grist_records_pd['r_id'])]
         new_pd['cyoa'] = new_pd['title'].apply(find_closest_cyoa, cyoa_df=grist_cyoa_pd)
-        new_pd['image_hashes2'] = new_pd['static_url'].apply(hash_static_url, temp_dir=config.get('project').get('temp_dir'))
+        new_pd['image_hashes'] = new_pd['static_url'].apply(hash_static_url, temp_dir=config.get('project').get('temp_dir'))
         add_pd = new_pd[[
             'author', 'created_utc', 'cyoa', 'r_id', 'is_self', 'link_flair_text', 'num_comments', 'permalink',
             'removed_by_category', 'score', 'selftext', 'subreddit', 'title', 'total_awards_received', 'upvote_ratio',
-            'urls', 'static_url', 'interactive_url', 'is_cyoa', 'image_hashes2'
+            'urls', 'static_url', 'interactive_url', 'is_cyoa', 'image_hashes'
         ]]
         add_json = add_pd.to_json(orient='records', default_handler=str)
         add_object = json.loads(add_json)
@@ -126,7 +141,7 @@ def grist_fetch_deepl(config: Dict) -> pd.DataFrame:
     :return: A pandas dataframe.
     """
     # Set up API
-    api = GristAPIWrapper(config.get('grist'))
+    api = GristAPIWrapper.from_config(config.get('grist'))
 
     grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=[
         'id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp', 'static_url', 'interactive_url', 'last_posted'
@@ -137,7 +152,7 @@ def grist_fetch_deepl(config: Dict) -> pd.DataFrame:
 
 def grist_fetch_keybert(config):
     # Set up API
-    api = GristAPIWrapper(config.get('grist'))
+    api = GristAPIWrapper.from_config(config.get('grist'))
 
     grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'uuid', 'official_title', 'deepl', 'deepl_timestamp',
                                                            'text', 'keybert'])
@@ -154,6 +169,6 @@ def grist_update_item(config, table, item_dict):
         result = [item_dict]
 
     # Set up API
-    api = GristAPIWrapper(config.get('grist'))
+    api = GristAPIWrapper.from_config(config.get('grist'))
     api.update_records(table, result, mock=False, prompt=False)
     return None

@@ -43,7 +43,7 @@ if not dbdir.exists():
 
 
 # Set up API
-api = GristAPIWrapper(config.get('grist'))
+api = GristAPIWrapper.from_config(config.get('grist'))
 grist_pd = api.fetch_table_pd('Records', col_names=[
         'id', 'cyoa_uuid', 'is_cyoa', 'static_url', 'interactive_url', 'broken_link', 'image_hashes2', 'created_utc',
         'cyoa', 'link_flair_text', 'title'
@@ -61,7 +61,7 @@ for index, row in cyoa_pd.iterrows():
     static_url = row['static_url']
     interactive_url = row['interactive_url']
     broken_link = row['broken_link']
-    image_hashes = row['image_hashes2']
+    image_hashes = row['image_hashes']
     flair = row['link_flair_text']
     title = row['title']
 
@@ -120,7 +120,7 @@ for index, row in cyoa_pd.iterrows():
         # Append results
         result_list.append({
             'id': g_id,
-            'image_hashes2': ', '.join(hash_list),
+            'image_hashes': ', '.join(hash_list),
             'broken_link': is_broken_link
         })
 
