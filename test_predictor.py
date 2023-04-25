@@ -16,6 +16,7 @@ import yaml
 from cyoa_archives.grist.routine import grist_fetch_deepl, grist_update_item
 from cyoa_archives.predictor.deepdanbooru import DeepDanbooru
 from cyoa_archives.predictor.image import CyoaImage
+from cyoa_archives.scrapers.interactive import download_interactive
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,10 +47,13 @@ def main(config, database_folder, temporary_folder):
         if temporary_folder.exists():
             logger.info(f'Deleting directory: {temporary_folder.resolve()}')
             shutil.rmtree(temporary_folder.resolve())
-            os.makedirs(temporary_folder)
+        os.makedirs(temporary_folder)
 
         # Download using gallery-dl
-        subprocess.run(['gallery-dl', static_url, '-d', temporary_folder.resolve()], universal_newlines=True)
+        if interactive_url:
+            download_interactive(interactive_url, temporary_folder.resolve())
+        elif static_url:
+            subprocess.run(['gallery-dl', static_url, '-d', temporary_folder.resolve()], universal_newlines=True)
 
         # Now run application on all images in the temporary directory
         image_paths = []

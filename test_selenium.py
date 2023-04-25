@@ -24,12 +24,13 @@ url = "https://radioarc.neocities.org/cyoa/Fire%20Emblem%20v2/"
 # url = 'https://dragonswhore-cyoas.neocities.org/Lure_p4_Dalet/'
 
 # store the response of URL
-response = urlopen(url + 'project.json')
+# response = urlopen(url + 'project.json')
+response = requests.get(url + 'project.json')
 # response = urlopen('https://imnotjuice.neocities.org/project.json')
 
 # storing the JSON response
 # from url in data
-data_json = json.loads(response.read())
+data_json = response.json()
 # print(data_json)
 
 def inject_image(uri, url, filename):
