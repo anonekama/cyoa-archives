@@ -118,6 +118,7 @@ def download_interactive(url, out_dir):
                 max_height = driver.execute_script("return document.body.scrollHeight")
                 if height + im_height > max_height:
                     # Arbitrary extra 1000 pixels because screen height isn't same as window hieght
-                    driver.set_window_size(1920, max_height - height + 1000)
+                    last_height = max_height - height if max_height - height > 1000 else 1000
+                    driver.set_window_size(1920, last_height + 1000)
 
             driver.close()
