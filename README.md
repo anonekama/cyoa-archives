@@ -22,6 +22,7 @@ Via PIP
 * ImageHash
 * Keybert
 * Selenium (and Chromedriver)
+* Imutils
 
 Via github
 
