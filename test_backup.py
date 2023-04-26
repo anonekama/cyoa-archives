@@ -7,11 +7,27 @@ import sys
 import pandas as pd
 import yaml
 
-from cyoa_archives.grist.routine import praw_fetch_add_update
+from cyoa_archives.grist.api import GristAPIWrapper
 
 def main(config):
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
+
+    api = GristAPIWrapper.from_config(config.get('grist'))
+    grist_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'official_title'])
+
+    result_list = []
+    for index, row in grist_pd.iterrows():
+        g_id = row['id']
+        title = row['official_title']
+
+        if '\n' in title:
+            result_list.append({
+                'id': g_id,
+                'official_title': title.replace('\n', '')
+            })
+
+    api.update_records('CYOAs', result_list, mock=False, prompt=True)
 
     # First we download data from grist and keep backups
     # /backups

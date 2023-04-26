@@ -126,12 +126,20 @@ class CyoaImage:
     def run_deepdanbooru_random(self, dd, coverage=1):
         # Resize wide images to a standard width for comparability
         max_width = 1200
-        if self.height > self.width > max_width:
-            scale_percent = max_width / self.width
-            dim = (int(self.width * scale_percent), int(self.height * scale_percent))
-            cyoa_page = cv2.resize(self.cv, dim, interpolation=cv2.INTER_AREA)
+        if self.height > self.width:
+            if self.width > max_width:
+                scale_percent = max_width / self.width
+                dim = (int(self.width * scale_percent), int(self.height * scale_percent))
+                cyoa_page = cv2.resize(self.cv, dim, interpolation=cv2.INTER_AREA)
+            else:
+                cyoa_page = self.cv
         else:
-            cyoa_page = self.cv
+            if self.width > 1900:
+                scale_percent = 1900 / self.width
+                dim = (int(self.width * scale_percent), int(self.height * scale_percent))
+                cyoa_page = cv2.resize(self.cv, dim, interpolation=cv2.INTER_AREA)
+            else:
+                cyoa_page = self.cv
 
         (new_height, new_width) = cyoa_page.shape[:2]
         new_area = new_height * new_width
