@@ -8,13 +8,16 @@ import subprocess
 
 from typing import Optional, List
 
-logging.basicConfig(level=logging.DEBUG)
+from natsort import natsorted
+
+from .interactive import download_interactive
+
 logger = logging.getLogger(__name__)
 
 
 class CyoaDownload:
 
-    def __init__(self, tempdir):
+    def __init__(self, tempdir: str):
         self.tempdir = pathlib.Path(tempdir)
 
     def clear_tempdir(self):
@@ -23,13 +26,12 @@ class CyoaDownload:
             shutil.rmtree(self.tempdir.resolve())
         os.makedirs(self.tempdir)
 
-    def get_files(self):
+    def get_files(self) -> List[pathlib.Path]:
         image_paths = []
         for extension in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
             for image_path in self.tempdir.rglob(extension):
                 image_paths.append(image_path)
-        # TODO: Sort the image paths in order
-        return image_paths
+        return natsorted(image_paths, key=lambda path: path.stem)
 
     def gallery_dl(self, url: str) -> List[pathlib.Path]:
         # TODO: Find a way to limit downloads from bad urls
@@ -40,5 +42,10 @@ class CyoaDownload:
         else:
             return []
 
-    def interactive_dl(self, url):
-        pass
+    def interactive_dl(self, url: str) -> List[pathlib.Path]:
+        if url:
+            self.clear_tempdir()
+            download_interactive(url=url, out_dir=self.tempdir)
+            return self.get_files()
+        else:
+            return []

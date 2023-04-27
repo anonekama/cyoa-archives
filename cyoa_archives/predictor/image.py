@@ -42,6 +42,15 @@ class CyoaImage:
             y=0
         )
 
+    def normalized_area(self, max_tall_image: int = 1200, max_wide_image: int = 1900) -> int:
+        # Suggest a normalized area of 1200 for tall images and 1900 for wide images
+        if self.height > self.width:
+            scale_ratio = max_tall_image / self.width
+        else:
+            scale_ratio = max_wide_image / self.width
+        return int(self.area * scale_ratio * scale_ratio)
+
+
     def make_chunks(self):
         # 1. Divide CYOA into large row sections
         min_size = self.width * 0.10  # Start with a 1:10 aspect ratio minimum

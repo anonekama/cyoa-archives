@@ -98,7 +98,7 @@ def praw_fetch_add_update(config: Dict) -> None:
     grist_records_pd = api.fetch_table_pd('Records', col_names=['id', 'r_id'])
     grist_cyoa_pd = api.fetch_table_pd('CYOAs', col_names=['id', 'official_title'])
 
-    for subreddit in ['nsfwcyoa', 'makeyourchoice', 'InteractiveCYOA']:
+    for subreddit in ['nsfwcyoa', 'makeyourchoice', 'InteractiveCYOA', 'allsync_mirror']:
 
         # Fetch data from Praw
         praw_data = praw.scrape(subreddit, limit=50)

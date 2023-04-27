@@ -1,94 +1,141 @@
+"""Run Keybert script.
+
+Download static and interactive CYOAs from Grist and perform OCR with Tesseract and keyword extraction with Keybert.
+By default, we run this script on every CYOA that lacks an 'ocr_timestamp' on Grist. However, CYOAs that are marked
+with 'deepl'=True will also be reprocessed. We skip CYOAs that lack a 'media' attribute or are of "Other" media type.
+
+Typical usage:
+    python3 run_keybert.py -c config.yaml -t temp
+
+"""
+
+__version__ = 0.2
+
 import argparse
-import json
 import logging
 import math
-import numpy as np
 import os
 import pathlib
-import shutil
-import subprocess
 import sys
 import time
 
-from collections import OrderedDict
+from typing import Dict
 
 from keybert import KeyBERT
-import pandas as pd
 import yaml
 
-from cyoa_archives.grist.routine import grist_fetch_keybert, grist_update_item
-from cyoa_archives.scrapers.interactive import download_interactive
+from cyoa_archives.grist.api import GristAPIWrapper
+from cyoa_archives.grist.routine import grist_update_item
+from cyoa_archives.scrapers.download import CyoaDownload
+from cyoa_archives.predictor.image import CyoaImage
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def main(config, database_folder, temporary_folder):
+# Keybert gives warnings unless parallelism is disabled
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+def main(config: Dict, temporary_folder: pathlib.Path) -> None:
+    """Main method for script.
+
+    :param config: A configuration object.
+    :param temporary_folder: Path to the temporary folder to use (warning: will be frequently deleted and replaced).
+    """
     # TODO: Assert that configuration file is appropriately formatted
 
-    cyoa_list = grist_fetch_keybert(config)
-    logger.debug(cyoa_list)
+    # Parse configuration file
+    grist_config = config.get('grist')
+    SERVER_URL = grist_config.get('server_url')
+    DOCUMENT_ID = grist_config.get('document_id')
+    API_KEY = grist_config.get('api_key')
+
+    predictor_config = config.get('predictor')
+    KEYBERT_MODEL = predictor_config.get('keybert_model')
+    MAX_TALL_WIDTH = predictor_config.get('max_width')
+    MAX_WIDE_WIDTH = predictor_config.get('max_wide_width')
+    KEYBERT_MIN_CHARS = predictor_config.get('keybert_min_chars')
+    KEYBERT_THRESHOLD = predictor_config.get('keybert_threshold')
 
     # Initialize keybert
-    predictor_config = config.get('predictor')
-    kw_model = KeyBERT(predictor_config.get('keybert_model'))
+    kw_model = KeyBERT(KEYBERT_MODEL)
+    downloader = CyoaDownload(tempdir=temporary_folder)
+
+    # Fetch CYOAs from Grist
+    api = GristAPIWrapper(server_url=SERVER_URL, document_id=DOCUMENT_ID, api_key=API_KEY)
+    cyoa_pd = api.fetch_table_pd('CYOAs', col_names=[
+        'id', 'deepl', 'ocr_timestamp', 'media', 'static_url', 'interactive_url', 'official_title',
+    ])
 
     # Run loop
-    for index, row in cyoa_list.iterrows():
+    for index, row in cyoa_pd.iterrows():
         g_id = row['id']
-        uuid = row['uuid']
+        deepl = row['deepl']
+        ocr_timestamp = row['ocr_timestamp']
+        media = row['media']
         interactive_url = row['interactive_url']
-        cyoa_title = row['official_title']
         static_url = row['static_url']
+        official_title = row['official_title']
 
-        # Empty temporary directory
-        if temporary_folder.exists():
-            logger.info(f'Deleting directory: {temporary_folder.resolve()}')
-            shutil.rmtree(temporary_folder.resolve())
-        os.makedirs(temporary_folder)
+        # Skip records that don't pass criteria
+        if not media or media == 'Other':
+            continue
+        if not static_url and not interactive_url:
+            continue
+        if ocr_timestamp and not deepl:
+            continue
 
-        # Download using gallery-dl
-        if interactive_url:
-            download_interactive(interactive_url, temporary_folder.resolve())
-        elif static_url:
-            subprocess.run(['gallery-dl', static_url, '-d', temporary_folder.resolve()], universal_newlines=True)
-
-        # Now run application on all images in the temporary directory
+        # Download using gallery-dl or selenium
+        # TODO: Handle raw html image scraping
+        # TODO: Fail gracefully
         image_paths = []
-        for extension in ['*.png', '*.jpg', '*.jpeg', '*.webp']:
-            for image_path in temporary_folder.rglob(extension):
-                image_paths.append(image_path)
-        logger.debug(image_paths)
+        if interactive_url:
+            image_paths = downloader.interactive_dl(interactive_url)
+        elif static_url:
+            image_paths = downloader.gallery_dl(static_url)
 
-    # Run loop on each cyoa
-    result_list = []
-    for index, row in cyoa_list.iterrows():
-        g_id = row['id']
-        text = row['text']
+        # Run the main processor loop
+        all_text = ''
+        total_pixels = 0
+        page_count = 0
+        for i, image_path in enumerate(image_paths):
+            logger.info(f'Processing image {i + 1}/{len(image_paths)} in {official_title}...')
+            cyoa_image = CyoaImage(image_path)
+            cyoa_image.make_chunks()
+            all_text = all_text + " " + cyoa_image.get_text()
+            page_count = page_count + 1
+            total_pixels = total_pixels + cyoa_image.normalized_area(
+                max_tall_image=MAX_TALL_WIDTH,
+                max_wide_image=MAX_WIDE_WIDTH
+            )
+        logger.info(f'Tesseract found {len(all_text)} characters in {official_title}.')
 
         # Run keybert
-        kb_output = kw_model.extract_keywords(text, keyphrase_ngram_range=(1, 1), stop_words=None, top_n=10)
         top_keywords = []
-        for keyword in kb_output:
-            word = keyword[0]
-            conf = keyword[1]
-            if conf > predictor_config.get('keybert_threshold'):
-                top_keywords.append(word)
-        logger.info(f'Keybert output: {top_keywords}')
-
-        # If not enough words, return nothing
-        if len(text) < 1000:
+        if len(all_text) < KEYBERT_MIN_CHARS:
+            # If not enough words, return nothing
             top_keywords = ['n/a']
+        else:
+            kb_output = kw_model.extract_keywords(all_text, keyphrase_ngram_range=(1, 1), stop_words=None, top_n=10)
+            for keyword in kb_output:
+                word = keyword[0]
+                conf = keyword[1]
+                if conf > KEYBERT_THRESHOLD:
+                    top_keywords.append(word)
+            logger.info(f'Keybert output: {top_keywords}')
 
-        # Assemble result
+        # Assemble result and update Grist
+        timestamp = time.time()
         result = {
             'id': g_id,
-            'keybert': ', '.join(top_keywords)
+            'pages': page_count,
+            'pixels': int(math.sqrt(total_pixels)),
+            'n_char': len(all_text),
+            'text': all_text.replace('\n', ' '),
+            'keybert': ', '.join(top_keywords),
+            'ocr_timestamp': timestamp,
+            'deepl': False
         }
-        result_list.append(result)
-
-    # Run update
-    grist_update_item(config, 'CYOAs', result_list)
-
+        grist_update_item(config, 'CYOAs', result)
 
 
 if __name__ == "__main__":
@@ -96,7 +143,6 @@ if __name__ == "__main__":
         description="Download CYOA images (static or interactive), run tesseract and keybert."
     )
     parser.add_argument("-c", "--config_file", help="Configuration file to use")
-    parser.add_argument("-d", "--database_folder", help="Folder to use as database")
     parser.add_argument("-t", "--temporary_folder", help="Folder to use to temporarily keep files")
 
     # Parse arguments
@@ -112,16 +158,8 @@ if __name__ == "__main__":
             logger.error(f"Could not read file: {filepath.resolve()}")
             sys.exit(1)
 
-    # If the database folder does not exist, create it
-    dbdir = pathlib.Path(args.database_folder)
-    tempdir = pathlib.Path(args.temporary_folder)
-    if not dbdir.exists():
-        logger.info(f'Making database folder at: {dbdir.resolve()}')
-        os.makedirs(dbdir)
-
     # Pass to main function
     main(
         config,
-        dbdir,
-        tempdir
+        pathlib.Path(args.temporary_folder)
     )

@@ -23,6 +23,7 @@ Via PIP
 * Keybert
 * Selenium (and Chromedriver)
 * Imutils
+* natsort
 
 Via github
 
