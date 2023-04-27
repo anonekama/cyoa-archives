@@ -88,6 +88,7 @@ def main(config: Dict, temporary_folder: pathlib.Path) -> None:
         # TODO: Handle raw html image scraping
         # TODO: Fail gracefully
         image_paths = []
+        logger.info(f'Attempting to download {official_title}...')
         if interactive_url:
             image_paths = downloader.interactive_dl(interactive_url)
         elif static_url:
