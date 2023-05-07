@@ -105,7 +105,7 @@ def main(config: Dict, temporary_folder: pathlib.Path, database_folder: pathlib.
         for i, image_path in enumerate(image_paths):
             logger.info(f'Processing image {i + 1}/{len(image_paths)} in {official_title}...')
             cyoa_image = CyoaImage(image_path)
-            cyoa_image.make_chunks()
+            #cyoa_image.make_chunks()
             this_dd_data = cyoa_image.run_deepdanbooru_random(dd, coverage=DD_COVERAGE)
             page_count = page_count + 1
             total_pixels = total_pixels + cyoa_image.normalized_area(

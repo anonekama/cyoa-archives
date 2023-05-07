@@ -42,7 +42,7 @@ class CyoaImage:
             y=0
         )
 
-    def normalized_area(self, max_tall_image: int = 1200, max_wide_image: int = 1900) -> int:
+    def normalized_area(self, max_tall_image: int = 1280, max_wide_image: int = 1920) -> int:
         # Suggest a normalized area of 1200 for tall images and 1900 for wide images
         if self.height > self.width:
             scale_ratio = max_tall_image / self.width
